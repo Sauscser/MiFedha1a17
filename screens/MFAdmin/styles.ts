@@ -1,11 +1,10 @@
-import {StyleSheet, Dimensions} from 'react-native';
-
+import { StyleSheet, Dimensions } from 'react-native';
 const styles = StyleSheet.create({
   adminImage: {
     width: '100%',
     height: "100%",
     resizeMode: 'cover',
-    top:"2%"
+    top: "2%"
   },
   title: {
     fontSize: 20,
@@ -13,7 +12,7 @@ const styles = StyleSheet.create({
     color: 'green',
     width: '70%',
     marginLeft: 25,
-    top: 5,
+    top: 5
   },
   loanFriendButton: {
     backgroundColor: '#064bfb',
@@ -25,9 +24,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     position: 'absolute',
     top: 100,
-    zIndex: 10,
+    zIndex: 10
   },
-
   chamaLoanAndCreditSalesButton: {
     backgroundColor: 'white',
     height: 60,
@@ -36,21 +34,18 @@ const styles = StyleSheet.create({
     width: Dimensions.get('screen').width - 60,
     justifyContent: 'center',
     alignItems: 'center',
-
-    marginTop: 10,
+    marginTop: 10
   },
-
   ChamaLoanAndCreditSalesText: {
     fontSize: 20,
     fontWeight: 'bold',
-    color: 'black',
+    color: 'black'
   },
   loanAFriendText: {
     fontSize: 30,
     fontWeight: 'bold',
-    color: 'white',
+    color: 'white'
   },
-
   viewForPressables: {
     backgroundColor: 'green',
     marginHorizontal: 10,
@@ -60,9 +55,8 @@ const styles = StyleSheet.create({
     marginTop: 10,
     justifyContent: 'center',
     alignItems: 'center',
-    flexDirection: 'column',
+    flexDirection: 'column'
   },
-
   viewForSalesPressables: {
     backgroundColor: 'green',
     marginHorizontal: 4,
@@ -72,9 +66,8 @@ const styles = StyleSheet.create({
     marginTop: 10,
     justifyContent: 'center',
     alignItems: 'center',
-    flexDirection: 'row',
+    flexDirection: 'row'
   },
-
   SalesPressables: {
     backgroundColor: '#72ebd8',
     marginHorizontal: 20,
@@ -84,124 +77,97 @@ const styles = StyleSheet.create({
     marginTop: 10,
     justifyContent: 'center',
     alignItems: 'center',
-    flexDirection: 'row',
-
+    flexDirection: 'row'
   },
-
   salesPressableText: {
     color: 'white',
-    fontSize: 13,
-    
+    fontSize: 13
   },
-
   viewForSalesText: {
     color: 'white',
     fontSize: 20,
     marginTop: 1,
-    height: 50,
+    height: 50
   },
-
   salesText: {
     fontSize: 20,
     color: "blue",
-    marginBottom:"1.5%"
+    marginBottom: "1.5%"
   },
-
   viewForClientsPressables: {
     backgroundColor: 'pink',
-    
     height: "100%",
     borderRadius: 4,
-    
     justifyContent: 'center',
     alignItems: 'center',
     flexDirection: 'row',
-    width: "100%",
-    
+    width: "100%"
   },
-
   viewForClientsCategories: {
     backgroundColor: '#e58d29',
-    marginTop:"5%",
-    marginBottom:"5%",
+    marginTop: "5%",
+    marginBottom: "5%",
     height: "100%",
     borderRadius: 4,
-    
     justifyContent: 'center',
     alignItems: 'center',
     flexDirection: 'column',
     width: "33%"
   },
-
   viewForClientsAndTitleMFNdogo: {
     backgroundColor: 'pink',
-    width:"100%",
+    width: "100%",
     height: "100%",
     borderRadius: 4,
-  
     justifyContent: 'center',
     alignItems: 'center',
-    flexDirection: 'row',
-    
+    flexDirection: 'row'
   },
-
   viewForClientsAndTitle: {
     backgroundColor: '#e58d29',
-    width:"100%",
+    width: "100%",
     height: "50%",
     borderRadius: 4,
-   
     justifyContent: 'center',
     alignItems: 'center',
-    flexDirection: 'row',
-    
+    flexDirection: 'row'
   },
-  
-
   clientsView: {
     backgroundColor: '#e58d29',
-    width:"100%",
+    width: "100%",
     height: "21%",
     borderRadius: 4,
     justifyContent: 'center',
     alignItems: 'center',
-    flexDirection: 'column',
+    flexDirection: 'column'
   },
-
   ClientsPressables: {
     backgroundColor: '#72ebd8',
-    width:"32%",
-    marginLeft:"1%",
-    marginRight:"1%",
+    width: "32%",
+    marginLeft: "1%",
+    marginRight: "1%",
     height: "50%",
     borderRadius: 4,
-  
     justifyContent: 'center',
     alignItems: 'center',
-    flexDirection: 'row',
-
-    
+    flexDirection: 'row'
   },
-
   clientsPressableText: {
     color: 'black',
     fontSize: 10,
-    marginTop: 1,
+    marginTop: 1
   },
-
   acEarningsView: {
     backgroundColor: '#e58d29',
     marginHorizontal: 5,
     width: Dimensions.get('screen').width - 10,
     height: 95,
     borderRadius: 20,
-
     justifyContent: 'center',
     alignItems: 'center',
     flexDirection: 'column',
-    marginTop: "2%",
+    marginTop: "2%"
   },
-
   viewForAcEarningsPressables: {
     backgroundColor: '#e58d29',
     marginHorizontal: 15,
@@ -211,41 +177,34 @@ const styles = StyleSheet.create({
     marginTop: "0.5%",
     justifyContent: 'center',
     alignItems: 'center',
-    flexDirection: 'row',
+    flexDirection: 'row'
   },
-
   earningsAcPressables: {
     backgroundColor: '#72ebd8',
-    
     height: 60,
     borderRadius: 10,
-    marginLeft:"1%",
-    marginRight:"1%",
+    marginLeft: "1%",
+    marginRight: "1%",
     justifyContent: 'center',
     alignItems: 'center',
     flexDirection: 'row',
-    width:"23%",
-    
+    width: "23%"
   },
-
   earningsAcPressablesSMNErn: {
     backgroundColor: '#72ebd8',
-    
     height: 60,
     borderRadius: 20,
-    marginLeft:"10%",
-    marginRight:"10%",
+    marginLeft: "10%",
+    marginRight: "10%",
     justifyContent: 'center',
     alignItems: 'center',
     flexDirection: 'row',
-    width:"26%",
-    
+    width: "26%"
   },
-
   earningsAcPressableText: {
     color: 'black',
     fontSize: 15,
-    marginTop: 1,
-  },
+    marginTop: 1
+  }
 });
 export default styles;

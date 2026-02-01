@@ -1,50 +1,41 @@
-import {StyleSheet, Dimensions} from 'react-native';
-
+import { StyleSheet, Dimensions } from 'react-native';
 const styles = StyleSheet.create({
   image: {
     width: '100%',
     height: "100%",
     resizeMode: 'cover',
     justifyContent: 'center',
-    alignItems: 'center',
-    
+    alignItems: 'center'
   },
-
   scrollVw: {
     width: '100%',
     height: "100%",
     resizeMode: 'cover',
     justifyContent: 'center',
-    marginTop:"2%",
-    
+    marginTop: "2%"
   },
-
   title: {
     fontSize: 20,
     fontWeight: 'bold',
-    color: 'black',
+    color: 'black'
   },
-
   loanTitleView: {
     backgroundColor: 'white',
-   
     marginHorizontal: 10,
     width: Dimensions.get('screen').width - 20,
     borderRadius: 5,
     marginTop: "5%",
     justifyContent: 'center',
     alignItems: 'center',
-    flexDirection: 'column',
+    flexDirection: 'column'
   },
-
-  
   sendLoanText: {
     fontSize: 20,
     fontWeight: 'bold',
     color: 'white',
     justifyContent: 'center',
     alignItems: 'center',
-    marginLeft: 30,
+    marginLeft: 30
   },
   sendLoanButton: {
     backgroundColor: '#fff',
@@ -55,17 +46,13 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginTop: "5%",
-    marginBottom: "100%",
-    
+    marginBottom: "100%"
   },
-
-  
   sendLoanButtonText: {
     fontSize: 15,
     fontWeight: 'bold',
-    color: 'black',
+    color: 'black'
   },
-
   sendLoanView2: {
     backgroundColor: 'skyblue',
     marginHorizontal: 10,
@@ -76,9 +63,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     flexDirection: 'column',
-    padding:"1%",
+    padding: "1%"
   },
-
   sendLoanInput2: {
     backgroundColor: 'white',
     marginHorizontal: 15,
@@ -87,9 +73,8 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     marginTop: "2%",
     justifyContent: 'center',
-    alignItems: 'center',
+    alignItems: 'center'
   },
-
   sendLoanView: {
     backgroundColor: 'skyblue',
     marginHorizontal: 10,
@@ -100,10 +85,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     flexDirection: 'column',
-    padding:"1%",
+    padding: "1%"
   },
-
-
   sendLoanInput: {
     backgroundColor: 'white',
     marginHorizontal: 15,
@@ -112,9 +95,7 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     marginTop: "2%",
     justifyContent: 'center',
-    alignItems: 'center',
-  },
-
-  
+    alignItems: 'center'
+  }
 });
 export default styles;

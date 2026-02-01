@@ -1,189 +1,141 @@
-import React, {useState, useRef,useEffect} from 'react';
-import {View, Text, ImageBackground, Pressable, FlatList, Alert} from 'react-native';
-
-import { API, graphqlOperation, Auth } from 'aws-amplify';
+import React, { useState, useRef, useEffect } from 'react';
+import { View, Text, ImageBackground, Pressable, FlatList, Alert } from 'react-native';
 import NonLnSent from "../../../../components/MyAc/VwWithdrawals";
 import styles from './styles';
-
 import { getCompany, getSMAccount, listFloatAdds, listFloatReductions, vwMyUsrDposits, vwMyUsrWthdrwls } from '../../../../src/graphql/queries';
 import { updateCompany, updateSMAccount } from '../../../../src/graphql/mutations';
-
+import { fetchUserAttributes } from "aws-amplify/auth";
+import { generateClient } from "aws-amplify/api";
+const client = generateClient();
 const FetchSMNonLnsSnt = props => {
-
-    
-    const [loading, setLoading] = useState(false);
-    const [Recvrs, setRecvrs] = useState([]);
-
-   
-    const fetchUsrDtls = async () => {
-
-      const userInfo = await Auth.currentAuthenticatedUser();
-      try {
-              const MFNDtls: any = await API.graphql(
-                  graphqlOperation(getSMAccount, {awsemail: userInfo.attributes.email}
-              ),);
-
-              const balances = MFNDtls.data.getSMAccount.balance;
-              const owner = MFNDtls.data.getSMAccount.owner;
-
-        const fetchLoanees = async () => {
-            setLoading(true);
-            
-              
-        
+  const [loading, setLoading] = useState(false);
+  const [Recvrs, setRecvrs] = useState([]);
+  const fetchUsrDtls = async () => {
+    const attributes = await fetchUserAttributes();
+    try {
+      const MFNDtls: any = await client.graphql({
+        query: getSMAccount,
+        variables: {
+          awsemail: attributes.email
+        }
+      });
+      const balances = MFNDtls.data.getSMAccount.balance;
+      const owner = MFNDtls.data.getSMAccount.owner;
+      const fetchLoanees = async () => {
+        setLoading(true);
+        try {
+          const Lonees: any = await client.graphql({
+            query: listFloatAdds,
+            variables: {
+              filter: {
+                withdrawerid: {
+                  eq: attributes.email
+                }
+              },
+              sortDirection: "DESC",
+              limit: 100
+            }
+          });
+          setRecvrs(Lonees.data.listFloatAdds.items);
+          const fetchCompDtls = async () => {
             try {
-              const Lonees:any = await API.graphql(graphqlOperation(listFloatAdds, 
-                { 
-                    filter:{
-                      withdrawerid: {eq:userInfo.attributes.email}
-                    } ,
-                      sortDirection: "DESC",
-                      limit:100
+              const MFNDtls: any = await client.graphql({
+                query: getCompany,
+                variables: {
+                  AdminId: "BaruchHabaB'ShemAdonai2"
+                }
+              });
+              const companyEarningBals = MFNDtls.data.getCompany.companyEarningBal;
+              const companyEarnings = MFNDtls.data.getCompany.companyEarning;
+              const enquiryFees = MFNDtls.data.getCompany.enquiryFee;
+              const updtActAdm = async () => {
+                try {
+                  await client.graphql({
+                    query: updateCompany,
+                    variables: {
+                      input: {
+                        AdminId: "BaruchHabaB'ShemAdonai2",
+                        companyEarningBal: parseFloat(companyEarningBals) + parseFloat(enquiryFees),
+                        companyEarning: parseFloat(companyEarnings) + parseFloat(enquiryFees)
+                      }
                     }
-                
-                  ));
-                  setRecvrs(Lonees.data.listFloatAdds.items);
-
-                  
-
-                  
-                            
-                            const fetchCompDtls = async () => {
-                              try {
-                                      const MFNDtls: any = await API.graphql(
-                                          graphqlOperation(getCompany, {AdminId: "BaruchHabaB'ShemAdonai2"}
-                                      ),);
-                      
-                                      const companyEarningBals = MFNDtls.data.getCompany.companyEarningBal;
-                                      const companyEarnings = MFNDtls.data.getCompany.companyEarning;
-                                      const enquiryFees = MFNDtls.data.getCompany.enquiryFee;
-                                      
-                                      
-                                                  const updtActAdm = async()=>{
-                                                    
-                                                    try{
-                                                        await API.graphql(
-                                                          graphqlOperation(updateCompany,{
-                                                            input:{
-                                                              AdminId:"BaruchHabaB'ShemAdonai2",
-                                                              companyEarningBal:parseFloat(companyEarningBals) + parseFloat(enquiryFees),
-                                                              companyEarning:parseFloat(companyEarnings) + parseFloat(enquiryFees),
-                                                            }
-                                                          })
-                                                        )
-                                                    }
-                                                    catch(error){
-                                                      if(error){
-                                                        Alert.alert("Check your internet connection")
-                                                        return;
-                                                    }
-                                                    }
-                                                    updtUsrAc();
-                                                    
-                                                  }
-              
-                                                  const updtUsrAc = async()=>{
-                                                    
-                                                    try{
-                                                        await API.graphql(
-                                                          graphqlOperation(updateSMAccount,{
-                                                            input:{
-                                                              awsemail: userInfo.attributes.email,
-                                                              balance:parseFloat(balances) - parseFloat(enquiryFees),
-                                                            }
-                                                          })
-                                                        )
-                                                    }
-                                                    catch(error){
-                                                      if(error){
-                                                        Alert.alert("Retry or update app or call customer care")
-                                                        return;
-                                                    }
-                                                    }
-                                                                                                        
-                                                  }
-                              
-              
-              
-                              
-              
-                      if(parseFloat(balances) < parseFloat(enquiryFees) ){
-                          Alert.alert("Account Balance is very little");
-                          return;
-                        }
-                        else{
-                            
-                          updtActAdm();
-                            }
-                            
-                              }
-                          catch (e)
-                          {
-                            if(e){
-                              Alert.alert("User does not exist does not exist; otherwise check internet connection");
-                              return;
-                            }
-                              console.log(e)
-                             
-                              
-                          }    
-              
-                  
-                           }
-                           await fetchCompDtls();
-              
-                          }
-              
-                          catch (e)
-                          {
-                            if(e){
-                              Alert.alert("Retry or update app or call customer care");
-                              return;
-                            }
-                              console.log(e)
-                             
-                              
-                          }    
-              
-                          
-                           }
-                           if (userInfo.attributes.sub!==owner) {
-                            Alert.alert("Please first create a main account")
-                            return;
-                          }  else {
-                           await fetchLoanees();}
+                  });
+                } catch (error) {
+                  if (error) {
+                    Alert.alert("Check your internet connection");
+                    return;
+                  }
+                }
+                updtUsrAc();
+              };
+              const updtUsrAc = async () => {
+                try {
+                  await client.graphql({
+                    query: updateSMAccount,
+                    variables: {
+                      input: {
+                        awsemail: attributes.email,
+                        balance: parseFloat(balances) - parseFloat(enquiryFees)
+                      }
+                    }
+                  });
+                } catch (error) {
+                  if (error) {
+                    Alert.alert("Retry or update app or call customer care");
+                    return;
+                  }
+                }
+              };
+              if (parseFloat(balances) < parseFloat(enquiryFees)) {
+                Alert.alert("Account Balance is very little");
+                return;
+              } else {
+                updtActAdm();
+              }
             } catch (e) {
+              if (e) {
+                Alert.alert("User does not exist does not exist; otherwise check internet connection");
+                return;
+              }
               console.log(e);
-            } finally {
-              setLoading(false);
             }
           };
-        
-          useEffect(() => {
-            fetchUsrDtls();
-          }, [])   
-
-  return (
-    <View style={styles.root}>
-      <FlatList
-      style= {{width:"100%"}}
-        data={Recvrs}
-        renderItem={({item}) => <NonLnSent SMAc={item} />}
-        keyExtractor={(item, index) => index.toString()}
-        onRefresh={fetchUsrDtls}
-        refreshing={loading}
-        showsVerticalScrollIndicator={false}
-        ListHeaderComponentStyle={{alignItems: 'center'}}
-        ListHeaderComponent={() => (
-          <>
+          await fetchCompDtls();
+        } catch (e) {
+          if (e) {
+            Alert.alert("Retry or update app or call customer care");
+            return;
+          }
+          console.log(e);
+        }
+      };
+      if (attributes.sub !== owner) {
+        Alert.alert("Please first create a main account");
+        return;
+      } else {
+        await fetchLoanees();
+      }
+    } catch (e) {
+      console.log(e);
+    } finally {
+      setLoading(false);
+    }
+  };
+  useEffect(() => {
+    fetchUsrDtls();
+  }, []);
+  return <View style={styles.root}>
+      <FlatList style={{
+      width: "100%"
+    }} data={Recvrs} renderItem={({
+      item
+    }) => <NonLnSent SMAc={item} />} keyExtractor={(item, index) => index.toString()} onRefresh={fetchUsrDtls} refreshing={loading} showsVerticalScrollIndicator={false} ListHeaderComponentStyle={{
+      alignItems: 'center'
+    }} ListHeaderComponent={() => <>
             
             <Text style={styles.label}> My Withdrawals</Text>
             <Text style={styles.label2}> (Please swipe down to load)</Text>
-          </>
-        )}
-      />
-    </View>
-  );
+          </>} />
+    </View>;
 };
-
 export default FetchSMNonLnsSnt;

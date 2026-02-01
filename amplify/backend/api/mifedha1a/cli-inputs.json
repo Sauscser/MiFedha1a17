@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "serviceConfiguration": {
+    "apiName": "mifedha1a",
+    "serviceName": "AppSync",
+    "defaultAuthType": {
+      "mode": "AMAZON_COGNITO_USER_POOLS",
+      "cognitoUserPoolId": "authmifedha1a2418a4fd"
+    },
+    "conflictResolution": {},
+    "additionalAuthTypes": []
+  }
+}

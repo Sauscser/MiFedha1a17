@@ -5,19 +5,20 @@ import { LinearGradient } from 'expo-linear-gradient';
 import styles from './styles';
 
 // Reusable Gradient Button
-const GradientButton = ({ onPress, text }) => (
-  <LinearGradient
-    colors={['#FF8C00', '#00BFFF']}
-    start={{ x: 0, y: 0 }}
-    end={{ x: 1, y: 1 }}
-    style={styles.gradientPressable}
-  >
+const GradientButton = ({
+  onPress,
+  text
+}) => <LinearGradient colors={['#FF8C00', '#00BFFF']} start={{
+  x: 0,
+  y: 0
+}} end={{
+  x: 1,
+  y: 1
+}} style={styles.gradientPressable}>
     <Pressable onPress={onPress} style={styles.clientsPressable}>
       <Text style={styles.clientsPressableText}>{text}</Text>
     </Pressable>
-  </LinearGradient>
-);
-
+  </LinearGradient>;
 const MyLoanAccount = () => {
   const navigation = useNavigation();
   const [id, setID] = useState('');
@@ -25,9 +26,9 @@ const MyLoanAccount = () => {
 
   // Navigation functions
   const navigateTo = (screen, params) => () => navigation.navigate(screen, params);
-
-  return (
-    <SafeAreaView style={{ flex: 1 }}>
+  return <SafeAreaView style={{
+    flex: 1
+  }}>
       <ScrollView>
         <View style={styles.adminImage}>
 
@@ -59,7 +60,9 @@ const MyLoanAccount = () => {
           <View style={styles.clientsView}>
             <Text style={styles.salesText}>Registration</Text>
             <GradientButton onPress={navigateTo('AddChmMembrsss')} text="Register Member" />
-            <GradientButton onPress={navigateTo('SgnIn2RemoveMmbrs', { id })} text="Deregister Member" />
+            <GradientButton onPress={navigateTo('SgnIn2RemoveMmbrs', {
+            id
+          })} text="Deregister Member" />
           </View>
 
           {/* ------------------- Group Remittance ------------------- */}
@@ -97,8 +100,6 @@ const MyLoanAccount = () => {
 
         </View>
       </ScrollView>
-    </SafeAreaView>
-  );
+    </SafeAreaView>;
 };
-
 export default MyLoanAccount;

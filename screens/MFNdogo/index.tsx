@@ -2,27 +2,31 @@ import React from 'react';
 import { useNavigation } from '@react-navigation/native';
 import { View, Text, Pressable, SafeAreaView, StyleSheet, ScrollView } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-
 const KFNdogoScreen = () => {
   const navigation = useNavigation();
-
   const nav = (route: string) => () => navigation.navigate(route);
-
-  const Section = ({ title, children, gradient }: { title: string, children: React.ReactNode, gradient: string[] }) => (
-    <LinearGradient colors={gradient} style={styles.section}>
+  const Section = ({
+    title,
+    children,
+    gradient
+  }: {
+    title: string;
+    children: React.ReactNode;
+    gradient: string[];
+  }) => <LinearGradient colors={gradient} style={styles.section}>
       <Text style={styles.sectionTitle}>{title}</Text>
       <View style={styles.buttonGroup}>{children}</View>
-    </LinearGradient>
-  );
-
-  const CustomButton = ({ title, onPress }: { title: string, onPress: () => void }) => (
-    <Pressable onPress={onPress} style={styles.button}>
+    </LinearGradient>;
+  const CustomButton = ({
+    title,
+    onPress
+  }: {
+    title: string;
+    onPress: () => void;
+  }) => <Pressable onPress={onPress} style={styles.button}>
       <Text style={styles.buttonText}>{title}</Text>
-    </Pressable>
-  );
-
-  return (
-    <SafeAreaView style={styles.container}>
+    </Pressable>;
+  return <SafeAreaView style={styles.container}>
       <ScrollView contentContainerStyle={styles.scrollContainer}>
 
         {/* Top Navigation */}
@@ -60,21 +64,18 @@ const KFNdogoScreen = () => {
         </Section>
 
       </ScrollView>
-    </SafeAreaView>
-  );
+    </SafeAreaView>;
 };
-
 export default KFNdogoScreen;
-
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f0f8ff',
+    backgroundColor: '#f0f8ff'
   },
   scrollContainer: {
     paddingVertical: 20,
     paddingBottom: 40,
-    alignItems: 'center',
+    alignItems: 'center'
   },
   topBar: {
     width: '90%',
@@ -82,7 +83,7 @@ const styles = StyleSheet.create({
     padding: 10,
     marginBottom: 20,
     alignItems: 'center',
-    elevation: 4,
+    elevation: 4
   },
   section: {
     width: '90%',
@@ -93,20 +94,20 @@ const styles = StyleSheet.create({
     shadowColor: '#000',
     shadowOpacity: 0.1,
     shadowRadius: 6,
-    elevation: 5,
+    elevation: 5
   },
   sectionTitle: {
     fontSize: 20,
     fontWeight: '700',
     color: '#fff',
     marginBottom: 15,
-    textAlign: 'center',
+    textAlign: 'center'
   },
   buttonGroup: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'center',
-    gap: 10,
+    gap: 10
   },
   button: {
     backgroundColor: '#ffffffcc',
@@ -119,11 +120,11 @@ const styles = StyleSheet.create({
     shadowColor: '#333',
     shadowOpacity: 0.15,
     shadowRadius: 5,
-    elevation: 3,
+    elevation: 3
   },
   buttonText: {
     fontSize: 15,
     fontWeight: '600',
-    color: '#333',
-  },
+    color: '#333'
+  }
 });

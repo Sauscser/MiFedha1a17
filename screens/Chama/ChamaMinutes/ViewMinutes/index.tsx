@@ -9,9 +9,10 @@ import {
   TouchableOpacity,
   Alert,
 } from "react-native";
-import { API, graphqlOperation, Storage, Auth } from "aws-amplify";
 import RNPrint from "react-native-print";
-
+import { generateClient } from "aws-amplify/api";
+import { getCurrentUser, fetchUserAttributes } from "aws-amplify/auth";
+import { getUrl } from "aws-amplify/storage";
 import {
   listMinutesByChama,
   listMinuteItemsByMinutes,
@@ -20,9 +21,20 @@ import {
 } from "../../../../src/graphql/queries";
 import { updateChamaMinutes } from "../../../../src/graphql/mutations";
 
+const client = generateClient();
+
+/* =========================
+   SAFE IMAGE COMPONENT
+   ========================= */
+const SafeImage = ({ uri, style }: { uri?: string; style: any }) => {
+  if (!uri || typeof uri !== "string" || uri.trim() === "") {
+    return null; // don’t render if invalid
+  }
+  return <Image source={{ uri }} style={style} />;
+};
+
 const ViewMinutesScreen = ({ route }) => {
   const { grpContact, groupName } = route.params;
-
   const [minutesList, setMinutesList] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -35,49 +47,38 @@ const ViewMinutesScreen = ({ route }) => {
      ========================= */
   const fetchMinutes = async () => {
     try {
-      const res: any = await API.graphql(
-        graphqlOperation(listMinutesByChama, {
-          grpContact,
-          sortDirection: "DESC",
-        })
-      );
-
+      const res: any = await client.graphql({
+        query: listMinutesByChama,
+        variables: { grpContact, sortDirection: "DESC" },
+      });
       const minutes = res?.data?.listMinutesByChama?.items || [];
-
       const enriched = await Promise.all(
         minutes.map(async (min: any) => {
           const [itemsRes, attendanceRes] = await Promise.all([
-            API.graphql(
-              graphqlOperation(listMinuteItemsByMinutes, {
-                minutesId: min.id,
-              })
-            ),
-            API.graphql(
-              graphqlOperation(listAttendanceByMinutes, {
-                minutesId: min.id,
-              })
-            ),
+            client.graphql({
+              query: listMinuteItemsByMinutes,
+              variables: { minutesId: min.id },
+            }),
+            client.graphql({
+              query: listAttendanceByMinutes,
+              variables: { minutesId: min.id },
+            }),
           ]);
-
           const chairSignUrl = min.chairpersonId
-            ? await Storage.get(min.chairpersonId)
+            ? (await getUrl({ key: min.chairpersonId })).url
             : null;
-
           const secSignUrl = min.secretaryId
-            ? await Storage.get(min.secretaryId)
+            ? (await getUrl({ key: min.secretaryId })).url
             : null;
-
           return {
             ...min,
             items: itemsRes?.data?.listMinuteItemsByMinutes?.items || [],
-            attendance:
-              attendanceRes?.data?.listAttendanceByMinutes?.items || [],
+            attendance: attendanceRes?.data?.listAttendanceByMinutes?.items || [],
             chairSignUrl,
             secSignUrl,
           };
         })
       );
-
       setMinutesList(enriched);
     } catch (error) {
       console.log("Error loading minutes:", error);
@@ -92,44 +93,43 @@ const ViewMinutesScreen = ({ route }) => {
      ========================= */
   const signAsSecretary = async (min: any) => {
     try {
-      const user = await Auth.currentAuthenticatedUser();
-      const email = user.attributes.email;
-
-      const groupRes: any = await API.graphql(
-        graphqlOperation(getGroup, { grpContact: min.grpContact })
-      );
+      const user = await getCurrentUser();
+      const attributes = await fetchUserAttributes();
+      const email = attributes.email;
+      const groupRes: any = await client.graphql({
+        query: getGroup,
+        variables: { grpContact: min.grpContact },
+      });
       const group = groupRes?.data?.getGroup;
-      if (!group) {
-        Alert.alert("Error", "Group not found");
-        return;
-      }
-
+      if (!group) return Alert.alert("Error", "Group not found");
       if (group.Admin2 !== email) {
-        Alert.alert("Not authorized", "Only the secretary can sign.");
-        return;
+        return Alert.alert("Not authorized", "Only the secretary can sign.");
       }
-
-      await API.graphql(
-        graphqlOperation(updateChamaMinutes, {
+      await client.graphql({
+        query: updateChamaMinutes,
+        variables: {
           input: {
             id: min.id,
             status: "FINALIZED",
-            secretaryId: group.secSign, // pick signature id from group
+            secretaryId: group.secSign,
           },
-        })
-      );
-
-      const secSignUrl = group.secSign ? await Storage.get(group.secSign) : null;
-
-      // Update local state immediately
+        },
+      });
+      const secSignUrl = group.secSign
+        ? (await getUrl({ key: group.secSign })).url
+        : null;
       setMinutesList((prev) =>
         prev.map((m) =>
           m.id === min.id
-            ? { ...m, status: "FINALIZED", secretaryId: group.secSign, secSignUrl }
+            ? {
+                ...m,
+                status: "FINALIZED",
+                secretaryId: group.secSign,
+                secSignUrl,
+              }
             : m
         )
       );
-
       Alert.alert("Signed", "Minutes finalized by secretary.");
     } catch (err) {
       console.error(err);
@@ -137,58 +137,54 @@ const ViewMinutesScreen = ({ route }) => {
     }
   };
 
- const signAsChair = async (min: any) => {
-  try {
-    // ✅ Check if secretary has signed first
-    if (min.status !== "FINALIZED") {
-      Alert.alert("Not allowed", "Secretary must sign first.");
-      return;
-    }
-
-    const user = await Auth.currentAuthenticatedUser();
-    const email = user.attributes.email;
-
-    const groupRes: any = await API.graphql(
-      graphqlOperation(getGroup, { grpContact: min.grpContact })
-    );
-    const group = groupRes?.data?.getGroup;
-    if (!group) {
-      Alert.alert("Error", "Group not found");
-      return;
-    }
-
-    if (group.Admin1 !== email) {
-      Alert.alert("Not authorized", "Only the chair can sign.");
-      return;
-    }
-
-    await API.graphql(
-      graphqlOperation(updateChamaMinutes, {
-        input: {
-          id: min.id,
-          status: "LOCKED",
-          chairpersonId: group.chairSign,
+  const signAsChair = async (min: any) => {
+    try {
+      if (min.status !== "FINALIZED") {
+        return Alert.alert("Not allowed", "Secretary must sign first.");
+      }
+      const user = await getCurrentUser();
+      const attributes = await fetchUserAttributes();
+      const email = attributes.email;
+      const groupRes: any = await client.graphql({
+        query: getGroup,
+        variables: { grpContact: min.grpContact },
+      });
+      const group = groupRes?.data?.getGroup;
+      if (!group) return Alert.alert("Error", "Group not found");
+      if (group.Admin1 !== email) {
+        return Alert.alert("Not authorized", "Only the chair can sign.");
+      }
+      await client.graphql({
+        query: updateChamaMinutes,
+        variables: {
+          input: {
+            id: min.id,
+            status: "LOCKED",
+            chairpersonId: group.chairSign,
+          },
         },
-      })
-    );
-
-    const chairSignUrl = group.chairSign ? await Storage.get(group.chairSign) : null;
-
-    setMinutesList((prev) =>
-      prev.map((m) =>
-        m.id === min.id
-          ? { ...m, status: "LOCKED", chairpersonId: group.chairSign, chairSignUrl }
-          : m
-      )
-    );
-
-    Alert.alert("Signed", "Minutes locked by chair.");
-  } catch (err) {
-    console.error(err);
-    Alert.alert("Error", "Unable to sign as chair.");
-  }
-};
-
+      });
+      const chairSignUrl = group.chairSign
+        ? (await getUrl({ key: group.chairSign })).url
+        : null;
+      setMinutesList((prev) =>
+        prev.map((m) =>
+          m.id === min.id
+            ? {
+                ...m,
+                status: "LOCKED",
+                chairpersonId: group.chairSign,
+                chairSignUrl,
+              }
+            : m
+        )
+      );
+      Alert.alert("Signed", "Minutes locked by chair.");
+    } catch (err) {
+      console.error(err);
+      Alert.alert("Error", "Unable to sign as chair.");
+    }
+  };
 
   /* =========================
      PDF EXPORT
@@ -198,72 +194,71 @@ const ViewMinutesScreen = ({ route }) => {
       const present = (min.attendance || []).filter(
         (a: any) => a.attendanceStatus === "PRESENT"
       );
-
       const html = `
         <html>
           <head>
             <style>
-              body { font-family: Arial; padding: 24px; }
-              h1 { color: #e29d58; }
-              h2 { margin-top: 20px; border-bottom: 1px solid #ccc; }
-              .item { margin-bottom: 12px; }
-              .decision { font-style: italic; color: #065f46; }
+              body { font-family: Arial, sans-serif; padding: 20px; }
+              h1 { text-align: center; color: #333; }
+              h2 { margin-top: 20px; color: #555; }
               table { width: 100%; border-collapse: collapse; margin-top: 10px; }
-              th, td { border: 1px solid #ddd; padding: 8px; }
-              .signatures { margin-top: 40px; display: flex; justify-content: space-between; }
-              img { max-height: 80px; }
+              th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
+              .signature { width: 200px; height: 100px; border: 1px solid #ccc; margin: 10px; }
             </style>
           </head>
-
           <body>
-            <h1>${groupName} — Official Minutes</h1>
+            <h1>${groupName} — Meeting Minutes</h1>
             <p><strong>Date:</strong> ${min.meetingDate}</p>
             <p><strong>Venue:</strong> ${min.venue || "-"}</p>
             <p><strong>Attendance:</strong> ${present.length}</p>
 
             <h2>Minutes</h2>
-            ${(min.items || [])
-              .sort((a: any, b: any) => (a.entryOrder || 0) - (b.entryOrder || 0))
-              .map(
-                (i: any) => `
-                <div class="item">
-                  <strong>${i.entryOrder}. ${i.minuteRef}</strong>
-                  <p>${i.content}</p>
-                  ${i.decision ? `<div class="decision">Decision: ${i.decision}</div>` : ""}
-                </div>
+            <ul>
+              ${(min.items || [])
+                .sort((a: any, b: any) => (a.entryOrder || 0) - (b.entryOrder || 0))
+                .map(
+                  (item: any) => `
+                <li>
+                  <strong>${item.entryOrder}. ${item.minuteRef}</strong><br/>
+                  ${item.content}<br/>
+                  ${item.decision ? `<em>Decision: ${item.decision}</em>` : ""}
+                </li>
               `
-              )
-              .join("")}
+                )
+                .join("")}
+            </ul>
 
-            <h2>Attendance Register</h2>
+            <h2>Attendance</h2>
             <table>
               <tr><th>Name</th><th>Status</th></tr>
-              ${(min.attendance || [])
+              ${present
                 .map(
                   (a: any) => `
-                  <tr>
-                    <td>${a.memberName}</td>
-                    <td>${a.attendanceStatus}</td>
-                  </tr>
-                `
+                <tr>
+                  <td>${a.memberName}</td>
+                  <td>${a.attendanceStatus}</td>
+                </tr>
+              `
                 )
                 .join("")}
             </table>
 
-            <div class="signatures">
-              <div>
-                <strong>Chairperson</strong><br/>
-                ${min.chairSignUrl ? `<img src="${min.chairSignUrl}" />` : "-"}
-              </div>
-              <div>
-                <strong>Secretary</strong><br/>
-                ${min.secSignUrl ? `<img src="${min.secSignUrl}" />` : "-"}
-              </div>
+            <h2>Signatures</h2>
+            <div style="display:flex; justify-content:space-between;">
+              ${
+                min.chairSignUrl
+                  ? `<img src="${min.chairSignUrl}" class="signature"/>`
+                  : "<div class='signature'>Chair Signature Missing</div>"
+              }
+              ${
+                min.secSignUrl
+                  ? `<img src="${min.secSignUrl}" class="signature"/>`
+                  : "<div class='signature'>Secretary Signature Missing</div>"
+              }
             </div>
           </body>
         </html>
       `;
-
       await RNPrint.print({ html });
     } catch (err) {
       Alert.alert("PDF Error", "Unable to export minutes");
@@ -273,7 +268,7 @@ const ViewMinutesScreen = ({ route }) => {
   /* =========================
      UI
      ========================= */
-  if (loading) {
+    if (loading) {
     return (
       <View style={styles.center}>
         <ActivityIndicator size="large" color="#e29d58" />
@@ -289,7 +284,6 @@ const ViewMinutesScreen = ({ route }) => {
         const presentCount = (min.attendance || []).filter(
           (a: any) => a.attendanceStatus === "PRESENT"
         ).length;
-
         return (
           <View key={min.id} style={styles.card}>
             <Text style={styles.date}>📅 {min.meetingDate}</Text>
@@ -305,7 +299,9 @@ const ViewMinutesScreen = ({ route }) => {
 
             <Text style={styles.section}>Minutes</Text>
             {(min.items || [])
-              .sort((a: any, b: any) => (a.entryOrder || 0) - (b.entryOrder || 0))
+              .sort(
+                (a: any, b: any) => (a.entryOrder || 0) - (b.entryOrder || 0)
+              )
               .map((item: any) => (
                 <View key={item.id} style={styles.minuteItem}>
                   <Text style={styles.minuteTitle}>
@@ -322,18 +318,8 @@ const ViewMinutesScreen = ({ route }) => {
 
             <Text style={styles.section}>Signatures</Text>
             <View style={styles.signatures}>
-              {min.chairSignUrl && (
-                <Image
-                  source={{ uri: min.chairSignUrl }}
-                  style={styles.signature}
-                />
-              )}
-              {min.secSignUrl && (
-                <Image
-                  source={{ uri: min.secSignUrl }}
-                  style={styles.signature}
-                />
-              )}
+              <SafeImage uri={min.chairSignUrl} style={styles.signature} />
+              <SafeImage uri={min.secSignUrl} style={styles.signature} />
             </View>
 
             <View style={styles.signButtons}>

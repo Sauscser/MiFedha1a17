@@ -1,5 +1,4 @@
-import {StyleSheet, Dimensions} from 'react-native';
-
+import { StyleSheet, Dimensions } from 'react-native';
 const styles = StyleSheet.create({
   image: {
     width: '100%',
@@ -9,14 +8,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     flexDirection: 'column',
     marginTop: 1,
-    flexWrap:"wrap"
+    flexWrap: "wrap"
   },
   title: {
     fontSize: 20,
     fontWeight: 'bold',
-    color: 'black',
+    color: 'black'
   },
-
   loanTitleView: {
     backgroundColor: 'white',
     marginHorizontal: 10,
@@ -27,10 +25,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     flexDirection: 'column',
-    top: 10,
-  
+    top: 10
   },
-
   sendAmtViewDesc: {
     backgroundColor: '#72ebd8',
     marginHorizontal: 10,
@@ -41,10 +37,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     flexDirection: 'column',
-    padding:"1%",
-   
+    padding: "1%"
   },
-
   sendAmtInputDesc: {
     backgroundColor: 'white',
     marginHorizontal: 15,
@@ -53,10 +47,8 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     marginTop: "2%",
     justifyContent: 'center',
-    alignItems: 'center',
-    
+    alignItems: 'center'
   },
-
   sendLoanView: {
     backgroundColor: '#72ebd8',
     marginHorizontal: 10,
@@ -67,9 +59,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     flexDirection: 'column',
-    marginBottom: 20,
+    marginBottom: 20
   },
-
   sendLoanView2: {
     backgroundColor: '#72ebd8',
     marginHorizontal: 10,
@@ -80,17 +71,15 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     flexDirection: 'column',
-    marginBottom: 20,
+    marginBottom: 20
   },
-
-
   sendLoanText: {
     fontSize: 20,
     fontWeight: 'bold',
     color: 'white',
     justifyContent: 'center',
     alignItems: 'center',
-    marginLeft: 30,
+    marginLeft: 30
   },
   sendLoanButton: {
     backgroundColor: '#fff',
@@ -101,17 +90,15 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginTop: 30,
-    marginBottom: 400,
+    marginBottom: 400
   },
   sendLoanButtonText: {
     fontSize: 15,
     fontWeight: 'bold',
-    color: 'black',
+    color: 'black'
   },
-
   sendLoanInput: {
     backgroundColor: 'white',
-    
     height: 45,
     borderRadius: 10,
     width: Dimensions.get('screen').width - 20,
@@ -119,22 +106,19 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     padding: 20,
-    marginHorizontal: 10,
+    marginHorizontal: 10
   },
-
   sendLoanInput2: {
     backgroundColor: 'white',
     width: Dimensions.get('screen').width - 20,
     height: 95,
     borderRadius: 10,
-    padding:20,
+    padding: 20,
     marginTop: 15,
     justifyContent: 'center',
     alignItems: 'center',
-    marginHorizontal: 10,
+    marginHorizontal: 10
   },
-
-
   loanSpecificationsTextInput: {
     backgroundColor: 'white',
     width: 300,
@@ -142,9 +126,8 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     marginTop: 15,
     justifyContent: 'center',
-    alignItems: 'center',
+    alignItems: 'center'
   },
-
   loanSpecificationView: {
     backgroundColor: '#72ebd8',
     marginHorizontal: 10,
@@ -155,7 +138,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     flexDirection: 'column',
-    marginBottom: 20,
-  },
+    marginBottom: 20
+  }
 });
 export default styles;

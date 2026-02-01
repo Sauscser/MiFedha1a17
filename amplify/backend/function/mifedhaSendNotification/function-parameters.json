@@ -1,0 +1,24 @@
+{
+  "permissions": {
+    "api": {
+      "mifedha1a": [
+        "Query"
+      ]
+    },
+    "storage": {
+      "notification:@model(appsync)": [
+        "read"
+      ]
+    }
+  },
+  "lambdaLayers": [],
+  "environmentVariableList": [
+    {
+      "cloudFormationParameterName": "projectId",
+      "environmentVariableName": "PROJECT_ID"
+    }
+  ],
+  "secretNames": [
+    "MiFedhaRidesKey"
+  ]
+}

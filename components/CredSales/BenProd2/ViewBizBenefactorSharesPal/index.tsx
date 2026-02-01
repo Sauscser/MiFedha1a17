@@ -1,0 +1,154 @@
+import { useNavigation } from '@react-navigation/native';
+import React, { useState } from 'react';
+import { generateClient } from 'aws-amplify/api';
+import { getCurrentUser, fetchUserAttributes } from 'aws-amplify/auth';
+import { View, Text, ActivityIndicator, Pressable, Alert } from 'react-native';
+
+import styles from './styles';
+import { getLinkBeneficiary2, getSMAccount } from '../../../../src/graphql/queries';
+import { updateLinkBeneficiary2 } from '../../../../src/graphql/mutations';
+
+export interface SMAccount {
+  SMAc: {
+    beneficiaryID: string,
+    benefactorAc: string,
+    benefactorPhone: string,
+    beneficiaryPhone: string,
+    prodName: string,
+    creatorName: string,
+    prodCost: number,
+    prodDesc: string,
+    createdAt: string,
+    benefitsAmount: number,
+    benefitStatus: string,
+    beneficiaryType: string
+  }
+}
+
+const client = generateClient();
+
+const SMCvLnStts = (props: SMAccount) => {
+  const {
+    SMAc: {
+      beneficiaryID,
+      benefactorAc,
+      benefactorPhone,
+      beneficiaryPhone,
+      prodName,
+      creatorName,
+      prodCost,
+      beneficiaryType,
+      prodDesc,
+      benefitsAmount,
+      benefitStatus
+    }
+  } = props;
+
+  const navigation = useNavigation();
+  const [isLoading, setIsLoading] = useState(false);
+
+  const VwBenefactorContriDtls = () => {
+    navigation.navigate("VwPalBenefactorContriDtls", {
+      benefactorAc,
+      benefactorPhone,
+      creatorName,
+      prodName
+    });
+  };
+
+  const updtSendrAc = async () => {
+    if (isLoading) {
+      return;
+    }
+    setIsLoading(true);
+
+    const user = await getCurrentUser();
+    const attributes = await fetchUserAttributes();
+
+    try {
+      const result2: any = await client.graphql({
+        query: getLinkBeneficiary2,
+        variables: { beneficiaryID }
+      });
+
+      const result3: any = await client.graphql({
+        query: getSMAccount,
+        variables: { awsemail: attributes.email }
+      });
+
+      const userDtl = result3.data.getSMAccount;
+
+      const owners = result2.data.getLinkBeneficiary2.owner;
+      const benefitStatusz = result2.data.getLinkBeneficiary2.benefitStatus;
+      const benefitsAmountz = result2.data.getLinkBeneficiary2.benefitsAmount;
+
+      const now = new Date();
+      const currentDate = now.toLocaleDateString();
+      const currentTime = now.toLocaleTimeString();
+      const dateTime = `${currentDate} ${currentTime}`;
+
+      if (owners !== userDtl.name) {
+        Alert.alert("You are not the owner of this Business");
+      } else if (benefitsAmountz === 0) {
+        Alert.alert("Benefits at 0");
+      } else {
+        const result: any = await client.graphql({
+          query: updateLinkBeneficiary2,
+          variables: {
+            input: {
+              beneficiaryID,
+              benefitStatus: benefitStatusz + ", Redeemed at KES " + benefitsAmount + " on " + dateTime,
+              benefitsAmount: 0
+            }
+          }
+        });
+
+        const updateResult = result?.data?.updateLinkBeneficiary2;
+
+        if (updateResult) {
+          Alert.alert("Benefits successfully redeemed");
+        } else {
+          Alert.alert("Redemption was unsuccessful");
+        }
+      }
+    } catch (error: any) {
+      console.log(error);
+      Alert.alert("Update app or call customer care");
+    }
+    setIsLoading(false);
+  };
+
+  return (
+    <View style={styles.pageContainer}>
+      <View style={styles.card}>
+        <Text style={styles.prodName}>{prodName}</Text>
+
+        <Text style={styles.prodInfo}><Text style={styles.label}>Benefactor Name:</Text> {creatorName}</Text>
+        <Text style={styles.prodInfo}><Text style={styles.label}>Product Creator Account:</Text> {benefactorPhone}</Text>
+        <Text style={styles.prodInfo}><Text style={styles.label}>Beneficiary Name:</Text> {beneficiaryPhone}</Text>
+
+        <Text style={styles.prodInfo}><Text style={styles.label}>Status:</Text> {benefitStatus}</Text>
+
+        <Text style={styles.prodInfo}><Text style={styles.label}>Cost:</Text> KES {prodCost.toLocaleString()}</Text>
+        <Text style={styles.prodInfo}><Text style={styles.label}>Benefits Pooled:</Text> KES {benefitsAmount.toLocaleString()}</Text>
+        <Text style={styles.prodDesc}>{prodDesc}</Text>
+      </View>
+
+      <View style={styles.buttonRow}>
+        <Pressable onPress={VwBenefactorContriDtls} style={styles.loanFriendButton}>
+          <Text>View My Contributions</Text>
+        </Pressable>
+
+        <Pressable onPress={updtSendrAc} style={styles.loanFriendButton}>
+          {isLoading ? (
+            <ActivityIndicator color="#fff" />
+          ) : (
+            <Text style={styles.buttonText}>Redeem Benefits</Text>
+          )}
+        </Pressable>
+      </View>
+    </View>
+  );
+};
+
+export default SMCvLnStts;

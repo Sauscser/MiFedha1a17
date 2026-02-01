@@ -1,28 +1,29 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, ScrollView, TouchableOpacity, Alert, 
-  KeyboardAvoidingView, Platform,
-  ActivityIndicator, Dimensions, StyleSheet, Image } from 'react-native';
-import { API, Auth, graphqlOperation, Storage } from 'aws-amplify';
+import { View, Text, TextInput, ScrollView, TouchableOpacity, Alert, KeyboardAvoidingView, Platform, ActivityIndicator, Dimensions, StyleSheet, Image } from 'react-native';
+import { getCurrentUser, fetchUserAttributes } from 'aws-amplify/auth';
+import { uploadData } from 'aws-amplify/storage';
+import { generateClient } from 'aws-amplify/api';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
-
 import { createChamaMembers, createGroup, updateChamaApply2, updateCompany } from '../../../src/graphql/mutations';
 import { getMiFedhaBankAdmin, getSMAccount, getCompany } from '../../../src/graphql/queries';
-
 export type UserReg = {
   usr: string;
 };
-
 const MAX_IMAGE_SIZE_MB = 5;
-
 const CreateChama = (props: UserReg) => {
-  const { usr } = props;
+  const {
+    usr
+  } = props;
   const navigation = useNavigation();
   const route = useRoute<any>();
-  const { id, bankAdminEmail, ChamaAcNu } = route.params;
-
+  const {
+    id,
+    bankAdminEmail,
+    ChamaAcNu
+  } = route.params;
   const [ChmPhn, setChmPhn] = useState('');
   const [awsEmail, setAWSEmail] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -46,7 +47,6 @@ const CreateChama = (props: UserReg) => {
   const [chairSignUri, setChairSignUri] = useState<string | null>(null);
   const [secSignKey, setSecSignKey] = useState<string | null>(null);
   const [secSignUri, setSecSignUri] = useState<string | null>(null);
-
   const ChmPhnNphoneContact = MmbaID + ChamaAcNu;
 
   /** Image Handling **/
@@ -55,45 +55,44 @@ const CreateChama = (props: UserReg) => {
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsEditing: false,
       aspect: [4, 3],
-      quality: 1,
+      quality: 1
     });
     if (!result.canceled && result.assets?.[0]?.uri) {
       handleSignature(result.assets[0].uri, role);
     }
   };
-
   const takeSignature = async (role: 'chair' | 'sec') => {
     const result = await ImagePicker.launchCameraAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsEditing: false,
       aspect: [4, 3],
-      quality: 1,
+      quality: 1
     });
     if (!result.canceled && result.assets?.[0]?.uri) {
       handleSignature(result.assets[0].uri, role);
     }
   };
-
   const handleSignature = async (uri: string, role: 'chair' | 'sec') => {
     try {
-      const manipResult = await ImageManipulator.manipulateAsync(
-        uri,
-        [{ resize: { width: 600 } }],
-        { compress: 0.7, format: ImageManipulator.SaveFormat.PNG }
-      );
-
+      const manipResult = await ImageManipulator.manipulateAsync(uri, [{
+        resize: {
+          width: 600
+        }
+      }], {
+        compress: 0.7,
+        format: ImageManipulator.SaveFormat.PNG
+      });
       const response = await fetch(manipResult.uri);
       const blob = await response.blob();
       const imageSizeMB = blob.size / (1024 * 1024);
-
       if (imageSizeMB > MAX_IMAGE_SIZE_MB) {
         Alert.alert('Image too large', `Image is ${imageSizeMB.toFixed(2)}MB. Max allowed is ${MAX_IMAGE_SIZE_MB}MB.`);
         return;
       }
-
       const filename = `${Date.now()}_${role}Sign.png`;
-      await Storage.put(filename, blob, { contentType: 'image/png' });
-
+      await Storage.put(filename, blob, {
+        contentType: 'image/png'
+      });
       if (role === 'chair') {
         setChairSignKey(filename);
         setChairSignUri(manipResult.uri);
@@ -101,14 +100,12 @@ const CreateChama = (props: UserReg) => {
         setSecSignKey(filename);
         setSecSignUri(manipResult.uri);
       }
-
       Alert.alert('Success', `${role} signature uploaded successfully.`);
     } catch (err) {
       console.error('Signature upload failed:', err);
       Alert.alert('Error', 'Failed to upload signature. Please try again.');
     }
   };
-
   const clearSignature = (role: 'chair' | 'sec') => {
     if (role === 'chair') {
       setChairSignKey(null);
@@ -118,79 +115,79 @@ const CreateChama = (props: UserReg) => {
       setSecSignUri(null);
     }
   };
-
   const handleCreateChama = async () => {
     setIsLoading(true);
     try {
-      if (!MmbaID || !ChmNm || !Sign2Phn 
-        || !Sign3Phn || !loanApprovalThreshHold 
-        || !pword || !SubFreq || !SubAmt || !lateSub
-        || !ventures || !ChmDesc) {
+      if (!MmbaID || !ChmNm || !Sign2Phn || !Sign3Phn || !loanApprovalThreshHold || !pword || !SubFreq || !SubAmt || !lateSub || !ventures || !ChmDesc) {
         Alert.alert('Missing required parameters. Cannot proceed.');
         setIsLoading(false);
         return;
       }
-
       const safeAWSEmail = awsEmail || 'None';
       const safeChmRegNo = ChmRegNo || 'None';
       const safeoprtnAreas = oprtnAreas || 'None';
       const safeventures = ventures || 'None';
-
-      const userInfo = await Auth.currentAuthenticatedUser();
-
-      const bankAdminRes: any = await API.graphql(
-        graphqlOperation(getMiFedhaBankAdmin, { nationalid: bankAdminEmail })
-      );
+      const client = await generateClient();
+      const attributes = fetchUserAttributes();
+      const userInfo = getCurrentUser();
+      const bankAdminRes: any = await client.graphql({
+        query: getMiFedhaBankAdmin,
+        variables: {
+          nationalid: bankAdminEmail
+        }
+      });
       const BankBranch = bankAdminRes.data.getMiFedhaBankAdmin.bank;
       const BankAdminEml = bankAdminRes.data.getMiFedhaBankAdmin.email;
-
-      const userRes: any = await API.graphql(
-        graphqlOperation(getSMAccount, { awsemail: userInfo.attributes.email })
-      );
+      const userRes: any = await client.graphql({
+        query: getSMAccount,
+        variables: {
+          awsemail: attributes.email
+        }
+      });
       const nationalidsss = userRes.data.getSMAccount.nationalid;
       const namess = userRes.data.getSMAccount.name;
       const owner = userRes.data.getSMAccount.owner;
-
-      if (userInfo.attributes.sub !== owner) {
+      if (attributes.sub !== owner) {
         Alert.alert('Please first create main account');
         setIsLoading(false);
         return;
       }
-
-      const sign2Res: any = await API.graphql(
-        graphqlOperation(getSMAccount, { awsemail: Sign2Phn })
-      );
-
-      const compRes: any = await API.graphql(
-        graphqlOperation(getCompany, { AdminId: "BaruchHabaB'ShemAdonai2" })
-      );
+      const sign2Res: any = await client.graphql({
+        query: getSMAccount,
+        variables: {
+          awsemail: Sign2Phn
+        }
+      });
+      const compRes: any = await client.graphql({
+        query: getCompany,
+        variables: {
+          AdminId: "BaruchHabaB'ShemAdonai2"
+        }
+      });
       const ttlActiveChms = compRes.data.getCompany.ttlActiveChm;
       const ttlActiveChmUserss = compRes.data.getCompany.ttlActiveChmUsers;
-
       const today = new Date();
       const curYrs = today.getFullYear() * 365;
       const curMnths = (today.getMonth() + 1) * 30.4375;
       const daysUpToDate = curYrs + curMnths + today.getDate();
-
       if (pword.length < 8) {
         Alert.alert('Password is too short; at least eight characters');
         setIsLoading(false);
         return;
       }
-
       if (parseFloat(lateSub) > parseFloat(SubAmt)) {
         Alert.alert('Too high late subscription penalty');
         setIsLoading(false);
         return;
       }
-
-            await API.graphql(
-        graphqlOperation(createGroup, {
+      await client.graphql({
+        query: createGroup,
+        variables: {
           input: {
             grpContact: ChamaAcNu,
             regNo: safeChmRegNo,
-            signitoryContact: userInfo.attributes.phone_number,
-            SignatoryEmail: userInfo.attributes.email,
+            signitoryContact: attributes.phone_number,
+            SignatoryEmail: attributes.email,
             SignitoryNatid: nationalidsss,
             signitoryName: namess,
             grpName: ChmNm,
@@ -227,7 +224,7 @@ const CreateChama = (props: UserReg) => {
             objOfficer: 'None',
             objReason: 'None',
             AdminNo: 0,
-            Admin1: userInfo.attributes.email,
+            Admin1: attributes.email,
             Admin2: Sign2Phn,
             Admin3: Sign3Phn,
             Admin4: 'None',
@@ -247,7 +244,6 @@ const CreateChama = (props: UserReg) => {
             Admin18: 'None',
             Admin19: 'None',
             Admin20: 'None',
-            // … other Admin fields unchanged …
             ttlNonLonsRecChm: 0,
             ttlNonLonsSentChm: 0,
             ttlDpst: 0,
@@ -266,24 +262,23 @@ const CreateChama = (props: UserReg) => {
             TtlClrdLonsTmsLnrChmNonCov: 0,
             TtlClrdLonsAmtLnrChmNonCov: 0,
             status: 'AccountActive',
-            owner: userInfo.attributes.sub,
+            owner: userInfo.userId,
             chamaBenSync: 0,
             loanApprovalThreshHold: loanApprovalThreshHold,
-            // NEW signature fields
             chairSign: chairSignKey ? chairSignKey : 'NoChairSignUploaded',
-            secSign: secSignKey ? secSignKey : 'NoSecSignUploaded',
-          },
-        })
-      );
-
-      await API.graphql(
-        graphqlOperation(createChamaMembers, {
+            secSign: secSignKey ? secSignKey : 'NoSecSignUploaded'
+          }
+        }
+      });
+      await client.graphql({
+        query: createChamaMembers,
+        variables: {
           input: {
             MembaId: MmbaID,
             groupContact: ChamaAcNu,
             regNo: safeChmRegNo,
             ChamaNMember: ChmPhnNphoneContact,
-            memberContact: userInfo.attributes.email,
+            memberContact: attributes.email,
             memberNatId: nationalidsss,
             memberChmBenefit: 0,
             timeCrtd: daysUpToDate,
@@ -300,32 +295,34 @@ const CreateChama = (props: UserReg) => {
             AcStatus: 'AccountActive',
             loanStatus: 'NoLoan',
             blStatus: 'AccountNotBL',
-            owner: userInfo.attributes.sub,
+            owner: userInfo.userId,
             ttlLateSubs: 0,
             subscriptionFrequency: SubFreq,
             subscriptionAmt: SubAmt,
             lateSubscriptionPenalty: lateSub,
-            transportApproved: 'ChamaTransportApprovedNo',
-          },
-        })
-      );
-
-      await API.graphql(
-        graphqlOperation(updateChamaApply2, {
-          input: { id: id, status: 'AccountInactive' },
-        })
-      );
-
-      await API.graphql(
-        graphqlOperation(updateCompany, {
+            transportApproved: 'ChamaTransportApprovedNo'
+          }
+        }
+      });
+      await client.graphql({
+        query: updateChamaApply2,
+        variables: {
+          input: {
+            id: id,
+            status: 'AccountInactive'
+          }
+        }
+      });
+      await client.graphql({
+        query: updateCompany,
+        variables: {
           input: {
             AdminId: "BaruchHabaB'ShemAdonai2",
             ttlActiveChm: parseFloat(ttlActiveChms) + 1,
-            ttlActiveChmUsers: parseFloat(ttlActiveChmUserss) + 1,
-          },
-        })
-      );
-
+            ttlActiveChmUsers: parseFloat(ttlActiveChmUserss) + 1
+          }
+        }
+      });
       Alert.alert(`Congrats ${namess}, You have created ${ChmNm} Chama`);
       // Reset form
       setChmPhn('');
@@ -352,71 +349,106 @@ const CreateChama = (props: UserReg) => {
       setIsLoading(false);
     }
   };
-
- return (
-  <LinearGradient colors={['#e58d29', 'skyblue']} style={{ flex: 1, padding: 16 }}>
-    <KeyboardAvoidingView
-      style={{ flex: 1 }}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? 100 : 0}
-    >
+  return <LinearGradient colors={['#e58d29', 'skyblue']} style={{
+    flex: 1,
+    padding: 16
+  }}>
+    <KeyboardAvoidingView style={{
+      flex: 1
+    }} behavior={Platform.OS === 'ios' ? 'padding' : undefined} keyboardVerticalOffset={Platform.OS === 'ios' ? 100 : 0}>
       <ScrollView contentContainerStyle={styles.scroll}>
-        <Text style={[styles.title, { textAlign: 'center', marginBottom: 16 }]}>
+        <Text style={[styles.title, {
+          textAlign: 'center',
+          marginBottom: 16
+        }]}>
           Fill Chama Details Below
         </Text>
 
-        {[
-          { placeholder: 'Signitory Chama Number', value: MmbaID, setter: setMmbaID },
-          { placeholder: 'Chama Registration Number (Optional)', value: ChmRegNo, setter: setChmRegNo },
-          { placeholder: 'Enter Chama Name', value: ChmNm, setter: setChmNm },
-          { placeholder: 'Enter Chama Email (Optional)', value: awsEmail, setter: setAWSEmail },
-          { placeholder: 'Enter Signatory 2 Email', value: Sign2Phn, setter: setSign2Phn },
-          { placeholder: 'Enter Signatory 3 Email', value: Sign3Phn, setter: setSign3Phn },
-          { placeholder: 'Chama Region (Optional)', value: oprtnAreas, setter: setoprtnAreas },
-          { placeholder: 'Enter Chama Venture', value: ventures, setter: setventures },
-          { placeholder: 'Enter Chama Description', value: ChmDesc, setter: setChmDesc, multiline: true },
-          { placeholder: 'Enter Loan Approval Threshold %', value: loanApprovalThreshHold, setter: setloanApprovalThreshHold, keyboardType: 'numeric' },
-          { placeholder: 'Signatory Subscription Amount', value: SubAmt, setter: setSubAmt, keyboardType: 'numeric' },
-          { placeholder: 'Signatory Subscription Frequency (Days)', value: SubFreq, setter: setSubFreq, keyboardType: 'numeric' },
-          { placeholder: 'Signatory Late Subscription Penalty', value: lateSub, setter: setlateSub, keyboardType: 'numeric' },
-          { placeholder: 'Enter Chama PassWord', value: pword, setter: setPW, secureTextEntry: true },
-        ].map((item, index) => {
+        {[{
+          placeholder: 'Signitory Chama Number',
+          value: MmbaID,
+          setter: setMmbaID
+        }, {
+          placeholder: 'Chama Registration Number (Optional)',
+          value: ChmRegNo,
+          setter: setChmRegNo
+        }, {
+          placeholder: 'Enter Chama Name',
+          value: ChmNm,
+          setter: setChmNm
+        }, {
+          placeholder: 'Enter Chama Email (Optional)',
+          value: awsEmail,
+          setter: setAWSEmail
+        }, {
+          placeholder: 'Enter Signatory 2 Email',
+          value: Sign2Phn,
+          setter: setSign2Phn
+        }, {
+          placeholder: 'Enter Signatory 3 Email',
+          value: Sign3Phn,
+          setter: setSign3Phn
+        }, {
+          placeholder: 'Chama Region (Optional)',
+          value: oprtnAreas,
+          setter: setoprtnAreas
+        }, {
+          placeholder: 'Enter Chama Venture',
+          value: ventures,
+          setter: setventures
+        }, {
+          placeholder: 'Enter Chama Description',
+          value: ChmDesc,
+          setter: setChmDesc,
+          multiline: true
+        }, {
+          placeholder: 'Enter Loan Approval Threshold %',
+          value: loanApprovalThreshHold,
+          setter: setloanApprovalThreshHold,
+          keyboardType: 'numeric'
+        }, {
+          placeholder: 'Signatory Subscription Amount',
+          value: SubAmt,
+          setter: setSubAmt,
+          keyboardType: 'numeric'
+        }, {
+          placeholder: 'Signatory Subscription Frequency (Days)',
+          value: SubFreq,
+          setter: setSubFreq,
+          keyboardType: 'numeric'
+        }, {
+          placeholder: 'Signatory Late Subscription Penalty',
+          value: lateSub,
+          setter: setlateSub,
+          keyboardType: 'numeric'
+        }, {
+          placeholder: 'Enter Chama PassWord',
+          value: pword,
+          setter: setPW,
+          secureTextEntry: true
+        }].map((item, index) => {
           if (item.secureTextEntry) {
-            return (
-              <View key={index} style={[styles.sendLoanView, { position: 'relative' }]}>
-                <TextInput
-                  placeholder={item.placeholder}
-                  value={item.value}
-                  onChangeText={item.setter}
-                  style={styles.sendLoanInput}
-                  secureTextEntry={!showPassword}
-                  editable
-                />
-                <TouchableOpacity
-                  style={{ position: 'absolute', right: 12, top: 12 }}
-                  onPress={() => setShowPassword(!showPassword)}
-                >
-                  <Text style={{ color: '#e58d29', fontWeight: 'bold' }}>
+            return <View key={index} style={[styles.sendLoanView, {
+              position: 'relative'
+            }]}>
+                <TextInput placeholder={item.placeholder} value={item.value} onChangeText={item.setter} style={styles.sendLoanInput} secureTextEntry={!showPassword} editable />
+                <TouchableOpacity style={{
+                position: 'absolute',
+                right: 12,
+                top: 12
+              }} onPress={() => setShowPassword(!showPassword)}>
+                  <Text style={{
+                  color: '#e58d29',
+                  fontWeight: 'bold'
+                }}>
                     {showPassword ? 'Hide' : 'Show'}
                   </Text>
                 </TouchableOpacity>
-              </View>
-            );
+              </View>;
           }
-
-          return (
-            <View key={index} style={styles.sendLoanView}>
-              <TextInput
-                placeholder={item.placeholder}
-                value={item.value}
-                onChangeText={item.setter}
-                style={item.multiline ? styles.sendAmtInputDesc : styles.sendLoanInput}
-                multiline={item.multiline || false}
-                editable
-                keyboardType={item.keyboardType || 'default'}
-              />
-            </View>
-          );
+          return <View key={index} style={styles.sendLoanView}>
+              <TextInput placeholder={item.placeholder} value={item.value} onChangeText={item.setter} style={item.multiline ? styles.sendAmtInputDesc : styles.sendLoanInput} multiline={item.multiline || false} editable keyboardType={item.keyboardType || 'default'} />
+            </View>;
         })}
 
         {/* Chair Signature Upload */}
@@ -426,17 +458,19 @@ const CreateChama = (props: UserReg) => {
               {chairSignUri ? 'Change Chair Signature' : 'Upload Chair Signature'}
             </Text>
           </TouchableOpacity>
-          <TouchableOpacity onPress={() => takeSignature('chair')} style={[styles.sendLoanButton, { marginTop: 10 }]}>
+          <TouchableOpacity onPress={() => takeSignature('chair')} style={[styles.sendLoanButton, {
+            marginTop: 10
+          }]}>
             <Text style={styles.sendLoanButtonText}>Take Chair Signature Photo</Text>
           </TouchableOpacity>
-          {chairSignUri && (
-            <View style={styles.previewContainer}>
-              <Image source={{ uri: chairSignUri }} style={styles.previewImage} />
+          {chairSignUri && <View style={styles.previewContainer}>
+              <Image source={{
+              uri: chairSignUri
+            }} style={styles.previewImage} />
               <TouchableOpacity onPress={() => clearSignature('chair')} style={styles.removeButton}>
                 <Text style={styles.removeButtonText}>Remove Chair Signature</Text>
               </TouchableOpacity>
-            </View>
-          )}
+            </View>}
         </View>
 
         {/* Secretary Signature Upload */}
@@ -446,47 +480,48 @@ const CreateChama = (props: UserReg) => {
               {secSignUri ? 'Change Secretary Signature' : 'Upload Secretary Signature'}
             </Text>
           </TouchableOpacity>
-          <TouchableOpacity onPress={() => takeSignature('sec')} style={[styles.sendLoanButton, { marginTop: 10 }]}>
+          <TouchableOpacity onPress={() => takeSignature('sec')} style={[styles.sendLoanButton, {
+            marginTop: 10
+          }]}>
             <Text style={styles.sendLoanButtonText}>Take Secretary Signature Photo</Text>
           </TouchableOpacity>
-          {secSignUri && (
-            <View style={styles.previewContainer}>
-              <Image source={{ uri: secSignUri }} style={styles.previewImage} />
+          {secSignUri && <View style={styles.previewContainer}>
+              <Image source={{
+              uri: secSignUri
+            }} style={styles.previewImage} />
               <TouchableOpacity onPress={() => clearSignature('sec')} style={styles.removeButton}>
                 <Text style={styles.removeButtonText}>Remove Secretary Signature</Text>
               </TouchableOpacity>
-            </View>
-          )}
+            </View>}
         </View>
 
         {/* Submit Button */}
         <TouchableOpacity onPress={handleCreateChama} style={styles.sendLoanButton}>
           <Text style={styles.sendLoanButtonText}>Click to Create Chama</Text>
-          {isLoading && <ActivityIndicator size="large" color="blue" style={{ marginTop: 8 }} />}
+          {isLoading && <ActivityIndicator size="large" color="blue" style={{
+            marginTop: 8
+          }} />}
         </TouchableOpacity>
       </ScrollView>
     </KeyboardAvoidingView>
-  </LinearGradient>
-);
-
+  </LinearGradient>;
 };
-
 export default CreateChama;
-
-const { width } = Dimensions.get('window');
-
+const {
+  width
+} = Dimensions.get('window');
 const styles = StyleSheet.create({
   title: {
     fontSize: 22,
     fontWeight: 'bold',
-    color: 'white',
+    color: 'white'
   },
   sendLoanView: {
-    marginVertical: 8,
+    marginVertical: 8
   },
   scroll: {
     padding: 20,
-    paddingBottom: 120, // just enough for button + keyboard
+    paddingBottom: 120 // just enough for button + keyboard
   },
   sendLoanInput: {
     backgroundColor: 'rgba(255,255,255,0.9)',
@@ -494,7 +529,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 12,
     fontSize: 16,
-    color: '#333',
+    color: '#333'
   },
   sendAmtInputDesc: {
     backgroundColor: 'rgba(255,255,255,0.9)',
@@ -504,7 +539,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#333',
     minHeight: 60,
-    textAlignVertical: 'top',
+    textAlignVertical: 'top'
   },
   sendLoanButton: {
     backgroundColor: 'white',
@@ -516,37 +551,40 @@ const styles = StyleSheet.create({
     width: width * 0.9,
     alignSelf: 'center',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
+    shadowOffset: {
+      width: 0,
+      height: 2
+    },
     shadowOpacity: 0.25,
     shadowRadius: 3.84,
     elevation: 5,
     flexDirection: 'row',
-    justifyContent: 'center',
+    justifyContent: 'center'
   },
   sendLoanButtonText: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#e58d29',
+    color: '#e58d29'
   },
   image: {
     flex: 1,
     paddingHorizontal: 16,
-    paddingTop: 20,
+    paddingTop: 20
   },
   loanTitleView: {
-    marginBottom: 16,
+    marginBottom: 16
   },
   passwordToggle: {
     position: 'absolute',
     right: 12,
     top: 12,
     color: '#e58d29',
-    fontWeight: 'bold',
+    fontWeight: 'bold'
   },
   // Signature preview styles
   previewContainer: {
     marginTop: 16,
-    alignItems: 'center',
+    alignItems: 'center'
   },
   previewImage: {
     width: 200,
@@ -554,7 +592,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     borderWidth: 1,
     borderColor: '#e5e7eb',
-    resizeMode: 'contain',
+    resizeMode: 'contain'
   },
   removeButton: {
     marginTop: 10,
@@ -569,11 +607,14 @@ const styles = StyleSheet.create({
     shadowColor: '#e58d29',
     shadowOpacity: 0.4,
     shadowRadius: 6,
-    shadowOffset: { width: 0, height: 3 },
+    shadowOffset: {
+      width: 0,
+      height: 3
+    }
   },
   removeButtonText: {
     color: '#fff',
     fontSize: 14,
-    fontWeight: '700',
-  },
+    fontWeight: '700'
+  }
 });

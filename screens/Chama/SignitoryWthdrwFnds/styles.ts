@@ -1,79 +1,48 @@
-import {StyleSheet, Dimensions} from 'react-native';
-
+// styles.js
+import { StyleSheet } from 'react-native';
 const styles = StyleSheet.create({
-  image: {
-    width: '100%',
-    height: "100%",
-    resizeMode: 'cover',
-    justifyContent: 'center',
+  amountTitleView: {
+    paddingVertical: 16,
     alignItems: 'center',
-    flexDirection: 'column',
-    marginTop: 1,
-    flexWrap:"wrap"
+    backgroundColor: '#f5f5f5',
+    borderBottomWidth: 1,
+    borderBottomColor: '#ddd'
   },
   title: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: 'black',
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#333'
   },
-
-  amountTitleView: {
-    backgroundColor: 'white',
-    marginHorizontal: 40,
-    width: Dimensions.get('screen').width - 80,
-    height: "7%",
-    borderRadius: 5,
-    marginTop: "2%",
-    justifyContent: 'center',
-    alignItems: 'center',
-    flexDirection: 'column',
-  },
-
   sendAmtView: {
-    backgroundColor: '#72ebd8',
-    marginHorizontal: 10,
-    width: Dimensions.get('screen').width - 20,
-    height: "11%",
-    borderRadius: 20,
-    marginTop: "6%",
-    justifyContent: 'center',
-    alignItems: 'center',
-    flexDirection: 'column',
+    marginVertical: 12,
+    paddingHorizontal: 16
   },
-
-  sendAmtText: {
+  sendAmtInput: {
+    borderWidth: 1,
+    borderColor: '#ccc',
+    borderRadius: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
     fontSize: 16,
-    fontWeight: 'bold',
-    color: 'white',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginLeft: "10%",
-    marginRight: "10%"
+    backgroundColor: '#fff'
+  },
+  sendAmtText: {
+    marginTop: 6,
+    fontSize: 14,
+    color: '#666'
   },
   sendAmtButton: {
-    backgroundColor: 'white',
-    height: "5%",
-    borderRadius: 5,
-    marginHorizontal: 50,
-    width: Dimensions.get('screen').width - 100,
-    marginTop: "3%",
-    justifyContent: 'center',
-    alignItems: 'center',
-    flexDirection: 'column',
-    marginBottom: "95%",
+    marginTop: 20,
+    marginHorizontal: 16,
+    backgroundColor: '#e29d59',
+    paddingVertical: 14,
+    borderRadius: 8,
+    alignItems: 'center'
   },
   sendAmtButtonText: {
     fontSize: 16,
-    fontWeight: 'bold',
-    color: 'black',
-  },
-
-  sendAmtInput: {
-    backgroundColor: 'white',
-    width:"95%",
-    height: "50%",
-    borderRadius: 5,
-    marginTop: "2%",
-  },
+    fontWeight: '600',
+    color: '#fff'
+  }
 });
 export default styles;

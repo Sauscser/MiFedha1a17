@@ -11,7 +11,9 @@ import {
   Image
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
-import { API, graphqlOperation, Auth, Storage } from 'aws-amplify';
+import { generateClient } from 'aws-amplify/api';
+import { getCurrentUser, fetchUserAttributes } from 'aws-amplify/auth';
+import { getUrl } from '@aws-amplify/storage';
 import ImageViewer from 'react-native-image-zoom-viewer';
 import { LinearGradient } from 'expo-linear-gradient';
 import RNPrint from 'react-native-print';
@@ -31,12 +33,20 @@ import {
 } from '../../../src/graphql/queries';
 import { createMessages, sendNotification, updateReqLoanChama } from '../../../src/graphql/mutations';
 
+const SafeImage = ({ uri, style }: { uri?: string; style: any }) => {
+  if (!uri || typeof uri !== 'string' || uri.trim() === '') {
+    return <Text style={styles.signatureMissing}>Not signed</Text>;
+  }
+  return <Image source={{ uri }} style={style} />;
+};
+
 // Helper math
 const tanh = (x: number) => Math.tanh(x);
 const clip = (x: number, min = 0, max = 100) => Math.max(min, Math.min(max, x));
 
 const AdminClearLoans = () => {
   const navigation = useNavigation();
+  const client = generateClient();
 
   // Groups
   const [adminGroups, setAdminGroups] = useState<any[]>([]);
@@ -78,10 +88,10 @@ const AdminClearLoans = () => {
   useEffect(() => {
     const fetchAdminGroups = async () => {
       try {
-        const user = await Auth.currentAuthenticatedUser();
-        const res: any = await API.graphql(
-          graphqlOperation(listGroups, { filter: { BankAdminEmail: { eq: user.attributes.email } } })
-        );
+        const user = await getCurrentUser();
+        const attributes = await fetchUserAttributes();
+        const email = attributes?.email;
+        const res: any = await client.graphql({ query: listGroups, variables: { filter: { BankAdminEmail: { eq: email } } } });
         setAdminGroups(res?.data?.listGroups?.items || []);
       } catch (err) {
         console.error(err);
@@ -95,16 +105,10 @@ const AdminClearLoans = () => {
   const fetchLoans = async (groupContact: string) => {
     setLoading(true);
     try {
-      const loanRes: any = await API.graphql(
-        graphqlOperation(listReqLoanChamas, {
-          filter: { chamaPhone: { eq: groupContact }, status: { eq: 'AwaitingResponse' } },
-        })
-      );
+      const loanRes: any = await client.graphql({ query: listReqLoanChamas, variables: { filter: { chamaPhone: { eq: groupContact }, status: { eq: 'AwaitingResponse' } } } });
       const loansRaw = loanRes?.data?.listReqLoanChamas?.items || [];
 
-      const membersRes: any = await API.graphql(
-        graphqlOperation(listChamaMembers, { filter: { groupContact: { eq: groupContact } } })
-      );
+      const membersRes: any = await client.graphql({ query: listChamaMembers, variables: { filter: { groupContact: { eq: groupContact } } } });
       const members = membersRes?.data?.listChamaMembers?.items || [];
       setGroupSize(members.length);
 
@@ -130,9 +134,7 @@ const AdminClearLoans = () => {
     if (!selectedGroup) return;
     setLoadingApprovals(true);
     try {
-      const approvalsRes: any = await API.graphql(
-        graphqlOperation(listChamaLnApprovals, { filter: { loanID: { eq: loanId } } })
-      );
+      const approvalsRes: any = await client.graphql({ query: listChamaLnApprovals, variables: { filter: { loanID: { eq: loanId } } } });
       setApprovingMembers(approvalsRes?.data?.listChamaLnApprovals?.items || []);
     } catch (err) {
       console.error(err);
@@ -155,9 +157,7 @@ const AdminClearLoans = () => {
 
     setLoadingMinutes(true);
     try {
-      const res: any = await API.graphql(
-        graphqlOperation(listChamaMinutes, { filter: { id: { eq: loan.loanMinutes } } })
-      );
+      const res: any = await client.graphql({ query: listChamaMinutes, variables: { filter: { id: { eq: loan.loanMinutes } } } });
 
       const minutes = res?.data?.listChamaMinutes?.items || [];
       const min = minutes.find((m: any) => m.id === loan.loanMinutes);
@@ -167,12 +167,12 @@ const AdminClearLoans = () => {
       }
 
       const [itemsRes, attendanceRes] = await Promise.all([
-        API.graphql(graphqlOperation(listMinuteItemsByMinutes, { minutesId: min.id })),
-        API.graphql(graphqlOperation(listAttendanceByMinutes, { minutesId: min.id })),
+        client.graphql({ query: listMinuteItemsByMinutes, variables: { minutesId: min.id } }),
+        client.graphql({ query: listAttendanceByMinutes, variables: { minutesId: min.id } }),
       ]);
 
-      const chairSignUrl = min.chairpersonId ? await Storage.get(min.chairpersonId) : null;
-      const secSignUrl = min.secretaryId ? await Storage.get(min.secretaryId) : null;
+      const chairSignUrl = min.chairpersonId ? (await getUrl({ key: min.chairpersonId }))?.url : null;
+      const secSignUrl = min.secretaryId ? (await getUrl({ key: min.secretaryId }))?.url : null;
 
       const fullMinutes = {
   ...min,
@@ -196,9 +196,7 @@ return fullMinutes;
   // Fetch identification images for the loanee (passport, ID front, ID back)
   const fetchLoaneePhotos = async (loaneeEmail: string) => {
     try {
-      const smRes: any = await API.graphql(
-        graphqlOperation(listSMAccounts, { filter: { awsemail: { eq: loaneeEmail } } })
-      );
+      const smRes: any = await client.graphql({ query: listSMAccounts, variables: { filter: { awsemail: { eq: loaneeEmail } } } });
       const sm = smRes?.data?.listSMAccounts?.items?.[0];
       if (!sm) {
         setPhotoUrls({});
@@ -207,13 +205,13 @@ return fullMinutes;
 
       const urls: { passport?: string; idFront?: string; idBack?: string } = {};
       if (sm.photoPassport && sm.photoPassport !== 'None') {
-        urls.passport = await Storage.get(sm.photoPassport);
+        urls.passport = (await getUrl({ key: sm.photoPassport }))?.url;
       }
       if (sm.idFront && sm.idFront !== 'None') {
-        urls.idFront = await Storage.get(sm.idFront);
+        urls.idFront = (await getUrl({ key: sm.idFront }))?.url;
       }
       if (sm.idBack && sm.idBack !== 'None') {
-        urls.idBack = await Storage.get(sm.idBack);
+        urls.idBack = (await getUrl({ key: sm.idBack }))?.url;
       }
       setPhotoUrls(urls);
     } catch (err) {
@@ -227,17 +225,11 @@ return fullMinutes;
     if (!selectedGroup) return;
     setLoadingCredit(true);
     try {
-      const groupRes: any = await API.graphql(
-        graphqlOperation(listGroups, { filter: { grpContact: { eq: selectedGroup.grpContact } } })
-      );
+      const groupRes: any = await client.graphql({ query: listGroups, variables: { filter: { grpContact: { eq: selectedGroup.grpContact } } } });
       const grp = groupRes?.data?.listGroups?.items?.[0] || {};
       const grpBal = Number(grp.grpBal || 0);
 
-      const memberRes: any = await API.graphql(
-        graphqlOperation(listChamaMembers, {
-          filter: { groupContact: { eq: selectedGroup.grpContact }, memberContact: { eq: loaneeEmail } },
-        })
-      );
+      const memberRes: any = await client.graphql({ query: listChamaMembers, variables: { filter: { groupContact: { eq: selectedGroup.grpContact }, memberContact: { eq: loaneeEmail } } } });
       const memberItems = memberRes?.data?.listChamaMembers?.items || [];
       if (memberItems.length === 0) {
         Alert.alert('No member record found', loaneeEmail);
@@ -247,9 +239,7 @@ return fullMinutes;
 
       let balance = 0, benefitsAmount = 0, p2pchmBenefits = 0, ttlDpstSM = 0, MaxTymsBL = 0;
 
-      const smRes: any = await API.graphql(
-        graphqlOperation(listSMAccounts, { filter: { awsemail: { eq: loaneeEmail } } })
-      );
+      const smRes: any = await client.graphql({ query: listSMAccounts, variables: { filter: { awsemail: { eq: loaneeEmail } } } });
       const sm = smRes?.data?.listSMAccounts?.items?.[0] || {};
       balance = Number(sm.balance || 0);
       benefitsAmount = Number(sm.benefitsAmount || 0);
@@ -257,49 +247,31 @@ return fullMinutes;
       ttlDpstSM = Number(sm.ttlDpstSM || 0);
       MaxTymsBL = Number(sm.MaxTymsBL || 0);
 
-      const glGroupRes: any = await API.graphql(
-        graphqlOperation(listCvrdGroupLoans, {
-          filter: { loaneePhn: { eq: loaneeEmail }, grpContact: { eq: selectedGroup.grpContact } },
-        })
-      );
+      const glGroupRes: any = await client.graphql({ query: listCvrdGroupLoans, variables: { filter: { loaneePhn: { eq: loaneeEmail }, grpContact: { eq: selectedGroup.grpContact } } } });
       const glGroup = glGroupRes?.data?.listCvrdGroupLoans?.items || [];
       const amountGiven_group = glGroup.reduce((a: number, l: any) => a + Number(l.amountGiven ?? l.amount ?? 0), 0);
       const lonBala_group = glGroup.reduce((a: number, l: any) => a + Number(l.lonBala ?? l.balance ?? 0), 0);
       const amountRepaid_group = glGroup.reduce((a: number, l: any) => a + Number(l.amountRepaid ?? 0), 0);
 
-      const glGlobalRes: any = await API.graphql(
-        graphqlOperation(listCvrdGroupLoans, { filter: { loaneePhn: { eq: loaneeEmail } } })
-      );
+      const glGlobalRes: any = await client.graphql({ query: listCvrdGroupLoans, variables: { filter: { loaneePhn: { eq: loaneeEmail } } } });
       const glGlobal = glGlobalRes?.data?.listCvrdGroupLoans?.items || [];
       const amountGiven_global = glGlobal.reduce((a: number, l: any) => a + Number(l.amountGiven ?? l.amount ?? 0), 0);
       const lonBala_global = glGlobal.reduce((a: number, l: any) => a + Number(l.lonBala ?? l.balance ?? 0), 0);
       const amountRepaid_global = glGlobal.reduce((a: number, l: any) => a + Number(l.amountRepaid ?? 0), 0);
 
-      const nlGroupRes: any = await API.graphql(
-        graphqlOperation(listGroupNonLoans, {
-          filter: { recipientPhn: { eq: loaneeEmail }, grpContact: { eq: selectedGroup.grpContact } },
-        })
-      );
+      const nlGroupRes: any = await client.graphql({ query: listGroupNonLoans, variables: { filter: { recipientPhn: { eq: loaneeEmail }, grpContact: { eq: selectedGroup.grpContact } } } });
       const nlGroup = nlGroupRes?.data?.listGroupNonLoans?.items || [];
       const amountSent_group = nlGroup.reduce((a: number, r: any) => a + Number(r.amountSent ?? r.amount ?? 0), 0);
 
-      const nlGlobalRes: any = await API.graphql(
-        graphqlOperation(listGroupNonLoans, { filter: { recipientPhn: { eq: loaneeEmail } } })
-      );
+      const nlGlobalRes: any = await client.graphql({ query: listGroupNonLoans, variables: { filter: { recipientPhn: { eq: loaneeEmail } } } });
       const nlGlobal = nlGlobalRes?.data?.listGroupNonLoans?.items || [];
       const amountSent_global = nlGlobal.reduce((a: number, r: any) => a + Number(r.amountSent ?? r.amount ?? 0), 0);
 
-      const contribGroupRes: any = await API.graphql(
-        graphqlOperation(listGrpMembersContributions, {
-          filter: { memberPhn: { eq: loaneeEmail }, grpContact: { eq: selectedGroup.grpContact } },
-        })
-      );
+      const contribGroupRes: any = await client.graphql({ query: listGrpMembersContributions, variables: { filter: { memberPhn: { eq: loaneeEmail }, grpContact: { eq: selectedGroup.grpContact } } } });
       const contribGroup = contribGroupRes?.data?.listGrpMembersContributions?.items || [];
       const contriAmount_group = contribGroup.reduce((a: number, c: any) => a + Number(c.contriAmount ?? c.amount ?? 0), 0);
 
-      const contribGlobalRes: any = await API.graphql(
-        graphqlOperation(listGrpMembersContributions, { filter: { memberPhn: { eq: loaneeEmail } } })
-      );
+      const contribGlobalRes: any = await client.graphql({ query: listGrpMembersContributions, variables: { filter: { memberPhn: { eq: loaneeEmail } } } });
       const contribGlobal = contribGlobalRes?.data?.listGrpMembersContributions?.items || [];
       const contriAmount_global = contribGlobal.reduce((a: number, c: any) => a + Number(c.contriAmount ?? c.amount ?? 0), 0);
 
@@ -384,9 +356,7 @@ return fullMinutes;
 
     if (approvalPercent >= thresholdPercent) {
       try {
-        await API.graphql(
-          graphqlOperation(updateReqLoanChama, { input: { id: loan.id, status: 'Cleared' } })
-        );
+        await client.graphql({ query: updateReqLoanChama, variables: { input: { id: loan.id, status: 'Cleared' } } });
 
         const recipients = [
           { email: loan.loaneeEmail, name: loan.loaneeName },
@@ -398,14 +368,8 @@ return fullMinutes;
         const messageBody = `MiFedha: Your loan in self-help group ${selectedGroup.grpName} has been cleared by the bank`;
 
         for (const r of recipients) {
-          await API.graphql(graphqlOperation(createMessages, {
-            input: { senderEmail: r.email, messageBody }
-          }));
-          await API.graphql(graphqlOperation(sendNotification, {
-            riderEmail: r.email,
-            title: 'MiFedha: Loan Bank Clearance',
-            body: messageBody,
-          }));
+          await client.graphql({ query: createMessages, variables: { input: { senderEmail: r.email, messageBody } } });
+          await client.graphql({ query: sendNotification, variables: { riderEmail: r.email, title: 'MiFedha: Loan Bank Clearance', body: messageBody } });
         }
 
         Alert.alert('Success', 'Loan cleared successfully');
@@ -791,7 +755,19 @@ ${minutes ? `
             {loan.loanMinutesImage && loan.loanMinutesImage !== 'NoMinutesUploaded' && (
               <TouchableOpacity
                 style={styles.secondaryBtn}
-                onPress={async () => setSelectedImage(await Storage.get(loan.loanMinutesImage))}
+                onPress={async () => {
+                  try {
+                    const url = (await getUrl({ key: loan.loanMinutesImage }))?.url;
+                    if (url && typeof url === 'string' && url.trim() !== '') {
+                      setSelectedImage(url);
+                    } else {
+                      Alert.alert('No image', 'Unable to load uploaded minutes');
+                    }
+                  } catch (err) {
+                    console.error('Error loading minutes image', err);
+                    Alert.alert('Error', 'Unable to load uploaded minutes');
+                  }
+                }}
               >
                 <Text>View Uploaded Minutes</Text>
               </TouchableOpacity>
@@ -815,12 +791,18 @@ ${minutes ? `
       {/* Image viewer modal */}
       <Modal visible={!!selectedImage} transparent onRequestClose={() => setSelectedImage(null)}>
         <View style={styles.imageModalContainer}>
-          <ImageViewer
-            imageUrls={[{ url: selectedImage || '' }]}
-            enableSwipeDown
-            onSwipeDown={() => setSelectedImage(null)}
-            backgroundColor="transparent"
-          />
+          {selectedImage ? (
+            <ImageViewer
+              imageUrls={[{ url: selectedImage }]}
+              enableSwipeDown
+              onSwipeDown={() => setSelectedImage(null)}
+              backgroundColor="transparent"
+            />
+          ) : (
+            <View style={{ padding: 20 }}>
+              <Text style={{ color: '#fff' }}>Unable to load image</Text>
+            </View>
+          )}
           <TouchableOpacity style={styles.imageCloseButton} onPress={() => setSelectedImage(null)}>
             <Text style={styles.imageCloseText}>Close</Text>
           </TouchableOpacity>
@@ -976,20 +958,12 @@ ${minutes ? `
                 <View style={styles.signatures}>
                   <View style={styles.signatureBlock}>
                     <Text style={styles.signatureLabel}>Chairperson</Text>
-                    {selectedMinutes?.chairSignUrl ? (
-                      <Image source={{ uri: selectedMinutes.chairSignUrl }} style={styles.signature} />
-                    ) : (
-                      <Text style={styles.signatureMissing}>Not signed</Text>
-                    )}
+                    <SafeImage uri={selectedMinutes?.chairSignUrl} style={styles.signature} />
                   </View>
 
                   <View style={styles.signatureBlock}>
                     <Text style={styles.signatureLabel}>Secretary</Text>
-                    {selectedMinutes?.secSignUrl ? (
-                      <Image source={{ uri: selectedMinutes.secSignUrl }} style={styles.signature} />
-                    ) : (
-                      <Text style={styles.signatureMissing}>Not signed</Text>
-                    )}
+                    <SafeImage uri={selectedMinutes?.secSignUrl} style={styles.signature} />
                   </View>
                 </View>
 

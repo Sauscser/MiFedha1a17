@@ -1,13 +1,11 @@
 import { StyleSheet, Dimensions } from 'react-native';
-
 const styles = StyleSheet.create({
   root: {
     flex: 1,
     alignItems: 'center',
     padding: 20,
-    backgroundColor: 'white',
+    backgroundColor: 'white'
   },
-
   sendLoanView: {
     backgroundColor: 'white',
     marginHorizontal: 10,
@@ -18,11 +16,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     flexDirection: 'column',
-    marginBottom: 5,
+    marginBottom: 5
   },
-
-  
-
   image: {
     width: '100%',
     height: "100%",
@@ -31,10 +26,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     flexDirection: 'column',
     marginTop: 1,
-    flexWrap:"wrap",
-    marginBottom:400
+    flexWrap: "wrap",
+    marginBottom: 400
   },
-
   sendLoanButton: {
     backgroundColor: 'white',
     width: "100%",
@@ -42,9 +36,8 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     marginTop: 1,
     justifyContent: 'center',
-    alignItems: 'center',
+    alignItems: 'center'
   },
-
   sendLoanInput: {
     backgroundColor: 'white',
     width: "100%",
@@ -52,25 +45,21 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     marginTop: 1,
     justifyContent: 'center',
-    alignItems: 'center',
+    alignItems: 'center'
   },
-
   label: {
     fontSize: 18,
-    fontWeight: 'bold',
+    fontWeight: 'bold'
   },
   label2: {
     fontSize: 18,
-    fontWeight: "normal",
+    fontWeight: "normal"
   },
-
-  
   title: {
     fontSize: 20,
     fontWeight: 'bold',
-    color: 'black',
+    color: 'black'
   },
-
   loanTitleView: {
     backgroundColor: 'white',
     marginHorizontal: 10,
@@ -81,10 +70,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     flexDirection: 'column',
-    top: 10,
-  
+    top: 10
   },
-
   sendAmtViewDesc: {
     backgroundColor: '#72ebd8',
     marginHorizontal: 10,
@@ -95,10 +82,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     flexDirection: 'column',
-    padding:"1%",
-   
+    padding: "1%"
   },
-
   sendAmtInputDesc: {
     backgroundColor: 'white',
     marginHorizontal: 15,
@@ -107,29 +92,21 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     marginTop: "2%",
     justifyContent: 'center',
-    alignItems: 'center',
-    
+    alignItems: 'center'
   },
-
-  
-
   sendLoanText: {
     fontSize: 20,
     fontWeight: 'bold',
     color: 'black',
     justifyContent: 'center',
     alignItems: 'center',
-    marginLeft: 30,
+    marginLeft: 30
   },
-  
   sendLoanButtonText: {
     fontSize: 15,
     fontWeight: 'bold',
-    color: 'black',
+    color: 'black'
   },
-
-  
-
   loanSpecificationsTextInput: {
     backgroundColor: 'white',
     width: 300,
@@ -137,9 +114,8 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     marginTop: 15,
     justifyContent: 'center',
-    alignItems: 'center',
+    alignItems: 'center'
   },
-
   loanSpecificationView: {
     backgroundColor: '#72ebd8',
     marginHorizontal: 10,
@@ -150,9 +126,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     flexDirection: 'column',
-    marginBottom: 20,
-  },
-  
+    marginBottom: 20
+  }
 });
-
 export default styles;

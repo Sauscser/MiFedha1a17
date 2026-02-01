@@ -1,16 +1,13 @@
-import {StyleSheet, Dimensions} from 'react-native';
-
+import { StyleSheet, Dimensions } from 'react-native';
 const styles = StyleSheet.create({
   image: {
     width: '100%',
     height: "100%",
     resizeMode: 'cover',
-    top:"2%",
-    
+    top: "2%",
     alignItems: 'center',
     flexDirection: 'column',
-
-    backgroundColor: '#e58d29',
+    backgroundColor: '#e58d29'
   },
   title: {
     fontSize: 20,
@@ -19,28 +16,19 @@ const styles = StyleSheet.create({
     width: '70%',
     marginLeft: "1%",
     marginRight: "1%",
-    marginTop: "1%",
-    
+    marginTop: "1%"
   },
-
   loanFriendButton: {
     backgroundColor: '#72ebd8',
-    
     height: "90%",
     borderRadius: 30,
-    
     width: "60%",
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight:"1%",
-    marginLeft:"1%",
-    marginTop: "1%",
-   
+    marginRight: "1%",
+    marginLeft: "1%",
+    marginTop: "1%"
   },
-
-  
-
-
   chamaLoanAndCreditSalesButton: {
     backgroundColor: 'white',
     height: "50%",
@@ -49,68 +37,52 @@ const styles = StyleSheet.create({
     width: Dimensions.get('screen').width - 60,
     justifyContent: 'center',
     alignItems: 'center',
-
-    marginTop: "1%",
+    marginTop: "1%"
   },
-
   chamaLoanAndCreditSalesButton4: {
     backgroundColor: 'white',
     height: "90%",
     borderRadius: 30,
-    width:"90%",
+    width: "90%",
     justifyContent: 'center',
     alignItems: 'center',
-
-    marginTop: "1%",
+    marginTop: "1%"
   },
-
   chamaLoanAndCreditSalesButton5: {
     backgroundColor: 'white',
     height: "90%",
     borderRadius: 30,
-    width:"90%",
+    width: "90%",
     justifyContent: 'center',
     alignItems: 'center',
-
-    marginTop: "1%",
+    marginTop: "1%"
   },
-
   ChamaLoanAndCreditSalesText: {
     fontSize: 10,
     fontWeight: 'bold',
-    color: 'black',
-    
+    color: 'black'
   },
-
   ChamaLoanAndCreditSalesText4: {
     fontSize: 10,
     fontWeight: 'bold',
-    color: 'black',
-    
+    color: 'black'
   },
-
   loanAFriendText: {
     fontSize: 12,
     fontWeight: 'bold',
-    color: 'black',
-    
+    color: 'black'
   },
-
   loanAFriendText2: {
     fontSize: 25,
     fontWeight: 'bold',
-    color: 'black',
-    
+    color: 'black'
   },
-
   loanAFriendText3: {
     fontSize: 25,
     fontWeight: 'bold',
     color: 'red',
-    padding:8
-    
+    padding: 8
   },
-
   viewForPressables1: {
     backgroundColor: '#72ebd8',
     marginHorizontal: 10,
@@ -120,10 +92,8 @@ const styles = StyleSheet.create({
     marginTop: "2%",
     justifyContent: 'center',
     alignItems: 'center',
-    flexDirection: 'row',
-   
+    flexDirection: 'row'
   },
-
   viewForPressables2: {
     backgroundColor: '#e58d29',
     marginHorizontal: 10,
@@ -133,11 +103,8 @@ const styles = StyleSheet.create({
     marginTop: "1%",
     justifyContent: 'center',
     alignItems: 'center',
-    flexDirection: 'column',
+    flexDirection: 'column'
   },
-
-  
-
   viewForPressables3: {
     backgroundColor: '#72ebd8',
     marginHorizontal: 10,
@@ -147,9 +114,8 @@ const styles = StyleSheet.create({
     marginTop: "5%",
     justifyContent: 'center',
     alignItems: 'center',
-    flexDirection: 'column',
+    flexDirection: 'column'
   },
-
   viewForPressables4: {
     backgroundColor: 'white',
     height: "30%",
@@ -159,9 +125,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     flexDirection: 'row',
-    marginTop: "1%",
+    marginTop: "1%"
   },
-
   viewForPressables5: {
     backgroundColor: 'white',
     height: "30%",
@@ -171,38 +136,31 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     flexDirection: 'column',
-    marginTop: "1%",
+    marginTop: "1%"
   },
-
   viewForPressables6: {
     backgroundColor: '#e58d29',
     width: "90%",
-    marginRight:"1%",
-    marginLeft:"1%",
+    marginRight: "1%",
+    marginLeft: "1%",
     height: "12%",
     borderRadius: 20,
     marginTop: "10%",
     justifyContent: 'center',
     alignItems: 'center',
-    flexDirection: 'column',
+    flexDirection: 'column'
   },
-
   loanFriendButton2: {
     backgroundColor: 'white',
-    
     height: "100%",
     borderRadius: 30,
-    
-    
     justifyContent: 'center',
     alignItems: 'center',
     width: "100%",
-    marginRight:"1%",
-    marginLeft:"1%",
+    marginRight: "1%",
+    marginLeft: "1%",
     marginTop: "1%",
-    marginBottom: "1%",
-   
-  },
-  
+    marginBottom: "1%"
+  }
 });
 export default styles;

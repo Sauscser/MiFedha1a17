@@ -1,5 +1,4 @@
 import { StyleSheet } from 'react-native';
-
 const styles = StyleSheet.create({
   root: {
     flex: 1,
@@ -10,9 +9,7 @@ const styles = StyleSheet.create({
   },
   label: {
     fontSize: 18,
-    fontWeight: 'bold',
-  },
-  
+    fontWeight: 'bold'
+  }
 });
-
 export default styles;

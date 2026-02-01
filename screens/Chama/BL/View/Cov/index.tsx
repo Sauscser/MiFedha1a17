@@ -1,87 +1,64 @@
-import React, {useState, useRef,useEffect} from 'react';
-import {View, Text, Pressable, FlatList, Alert} from 'react-native';
-
-import { API, graphqlOperation, Auth } from 'aws-amplify';
+import React, { useState, useEffect } from 'react';
+import { View, Text, FlatList } from 'react-native';
+import { generateClient } from 'aws-amplify/api';
+import { getCurrentUser, fetchUserAttributes } from 'aws-amplify/auth';
 import LnerStts from "../../../../../components/Chama/BL/BLChmCovLn";
 import styles from './styles';
-import { getCompany, getGroup,  listCvrdGroupLoans,  vwLnrNLnee } from '../../../../../src/graphql/queries';
+import { listCvrdGroupLoans } from '../../../../../src/graphql/queries';
 import { useRoute } from '@react-navigation/core';
-import { updateCompany, updateGroup } from '../../../../../src/graphql/mutations';
-
+const client = generateClient();
 const FetchSMCovLns = props => {
-
-    const[LneePhn, setLneePhn] = useState(null);
-    const [loading, setLoading] = useState(false);
-    const [Loanees, setLoanees] = useState([]);
-    const route = useRoute()
-
-    const fetchUser = async () => {
-        const userInfo = await Auth.currentAuthenticatedUser();
-              
-        setLneePhn(userInfo.attributes.email);
-             
-      };
-      
-  
-      useEffect(() => {
-          fetchUser();
-        }, []);
-
-        const fetchLoanees = async () => {
-            setLoading(true);
-            try {
-              const Lonees:any = await API.graphql(graphqlOperation(listCvrdGroupLoans, 
-               {
-                      
-                      
-                      filter: {
-                        and: {
-                          
-                          lonBala:{gt:0},
-                          grpContact: {eq:route.params.ChmNMmbrPhns},
-                          
-                        }
-                      },
-                    }
-                 
-                  ));
-
-                  setLoanees(Lonees.data.listCvrdGroupLoans.items);
-
-              
-            } catch (e) {
-              console.log(e);
-            } finally {
-              setLoading(false);
+  const [LneePhn, setLneePhn] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [Loanees, setLoanees] = useState([]);
+  const route = useRoute();
+  const fetchUser = async () => {
+    const userInfo = await getCurrentUser();
+    const attrs = await fetchUserAttributes();
+    setLneePhn(attrs.email);
+  };
+  useEffect(() => {
+    fetchUser();
+  }, []);
+  const fetchLoanees = async () => {
+    setLoading(true);
+    try {
+      const Lonees: any = await client.graphql({
+        query: listCvrdGroupLoans,
+        variables: {
+          filter: {
+            and: {
+              lonBala: {
+                gt: 0
+              },
+              grpContact: {
+                eq: route.params.ChmNMmbrPhns
+              }
             }
-          };
-        
-          useEffect(() => {
-            fetchLoanees();
-          }, [])
-
-  return (
-    <View style={styles.root}>
-      <FlatList
-      style= {{width:"100%"}}
-        data={Loanees}
-        renderItem={({item}) => <LnerStts ChamaMmbrshpDtls={item} />}
-        keyExtractor={(item, index) => index.toString()}
-        onRefresh={fetchLoanees}
-        refreshing={loading}
-        showsVerticalScrollIndicator={false}
-        ListHeaderComponentStyle={{alignItems: 'center'}}
-        ListHeaderComponent={() => (
-          <>
-            
+          }
+        }
+      });
+      setLoanees(Lonees.data.listCvrdGroupLoans.items);
+    } catch (e) {
+      console.log(e);
+    } finally {
+      setLoading(false);
+    }
+  };
+  useEffect(() => {
+    fetchLoanees();
+  }, []);
+  return <View style={styles.root}>
+      <FlatList style={{
+      width: "100%"
+    }} data={Loanees} renderItem={({
+      item
+    }) => <LnerStts ChamaMmbrshpDtls={item} />} keyExtractor={(item, index) => index.toString()} onRefresh={fetchLoanees} refreshing={loading} showsVerticalScrollIndicator={false} ListHeaderComponentStyle={{
+      alignItems: 'center'
+    }} ListHeaderComponent={() => <>
             <Text style={styles.label}> Swipe down to refresh</Text>
             <Text style={styles.label}> Select to Blacklist</Text>
-
-          </>
-        )}
-      />
-    </View>
-  );
+          </>} />
+    </View>;
 };
-
 export default FetchSMCovLns;

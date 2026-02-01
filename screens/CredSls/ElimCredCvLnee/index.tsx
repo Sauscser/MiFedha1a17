@@ -1,121 +1,72 @@
-import React, {useEffect, useState} from 'react';
-
-import {createSMAccount, updateCompany} from '../../../src/graphql/mutations';
-import { getCompany, listSMAccounts, } from '../../../src/graphql/queries';
-import {Auth,  graphqlOperation, API} from 'aws-amplify';
-
-import {useNavigation} from '@react-navigation/native';
-
-
-import {
-  View,
-  Text,
-  
-  TextInput,
-  ScrollView,
-  
-  TouchableOpacity,
-  Alert,
-  ActivityIndicator,
-} from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { createSMAccount, updateCompany } from '../../../src/graphql/mutations';
+import { getCompany, listSMAccounts } from '../../../src/graphql/queries';
+import { useNavigation } from '@react-navigation/native';
+import { View, Text, TextInput, ScrollView, TouchableOpacity, Alert, ActivityIndicator } from 'react-native';
 import styles from './styles';
-
-
-  
-
-
-const CreateAcForm = (props) => {
-
-  
+import { getCurrentUser, fetchUserAttributes } from 'aws-amplify/auth';
+import { generateClient } from 'aws-amplify/api';
+const client = generateClient();
+const CreateAcForm = props => {
   const navigation = useNavigation();
-
   const [nationalId, setNationalid] = useState('');
-  const [phoneContact, setPhoneContact] = useState(null);
-  const [awsEmail, setAWSEmail] = useState(null);
+  const [phoneContact, setPhoneContact] = useState<string | null>(null);
+  const [awsEmail, setAWSEmail] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [pword, setPW] = useState('');
-
-  const[ownr, setownr] = useState(null);
-
+  const [ownr, setownr] = useState<string | null>(null);
   const moveToWelcomPg = () => {
     navigation.navigate("CredSlsLneess");
   };
-
-
-  
-
-  
-    const fetchUser = async () => {
-      const userInfo = await Auth.currentAuthenticatedUser();
-      
-      const me = userInfo.attributes.sub;
-      setPhoneContact(userInfo.attributes.phone_number);
-      setAWSEmail(userInfo.attributes.email);  
-      
-      const ChckUsrExistence = async () => {
-        try {
-          const UsrDtls:any = await API.graphql(
-            graphqlOperation(listSMAccounts,
-              { filter: {
-                  
-                    owner: { eq: me}
-                              
-                }}
-            )
-          )
-          if (UsrDtls.data.listSMAccounts.items.length < 1) {
-            Alert.alert("Please Main Account");
-            return;
-            
+  const fetchUser = async () => {
+    try {
+      const userInfo = await getCurrentUser();
+      const attributes = await fetchUserAttributes();
+      const me = userInfo.userId;
+      setPhoneContact(attributes.phone_number || null);
+      setAWSEmail(attributes.email || null);
+      const UsrDtls: any = await client.graphql({
+        query: listSMAccounts,
+        variables: {
+          filter: {
+            owner: {
+              eq: me
+            }
           }
-          else{
-            moveToWelcomPg();
         }
-        } catch (e) {
-          if(e){Alert.alert("Please first sign up")}
-          console.error(e);
-        }
+      });
+      if (UsrDtls.data.listSMAccounts.items.length < 1) {
+        Alert.alert("Please Main Account");
+        return;
+      } else {
+        moveToWelcomPg();
       }
-      await ChckUsrExistence();
-    };
-
-    
-
-    useEffect(() => {
-        fetchUser();
-      }, []);
-
-      
-
-
-
-useEffect(() =>{
-  const natid=nationalId
-    if(!natid && natid!=="")
-    {
+    } catch (e) {
+      console.error(e);
+      Alert.alert("Please first sign up");
+    }
+  };
+  useEffect(() => {
+    fetchUser();
+  }, []);
+  useEffect(() => {
+    const natid = nationalId;
+    if (!natid && natid !== "") {
       setNationalid("");
       return;
     }
     setNationalid(natid);
-    }, [nationalId]
-     );
-
-     useEffect(() =>{
-      const pws=pword
-        if(!pws && pws!=="")
-        {
-          setPW("");
-          return;
-        }
-        setPW(pws);
-        }, [pword]
-         );
-        
-          return (
-            <View>
-              
-            </View>
-          );
-        };
-        
-        export default CreateAcForm;
+  }, [nationalId]);
+  useEffect(() => {
+    const pws = pword;
+    if (!pws && pws !== "") {
+      setPW("");
+      return;
+    }
+    setPW(pws);
+  }, [pword]);
+  return <View>
+      {/* Add your UI elements here */}
+    </View>;
+};
+export default CreateAcForm;

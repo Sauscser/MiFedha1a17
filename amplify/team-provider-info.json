@@ -1,0 +1,38 @@
+{
+  "mifedha": {
+    "awscloudformation": {
+      "AuthRoleName": "amplify-mifedha1a-mifedha-c789c-authRole",
+      "UnauthRoleArn": "arn:aws:iam::870395359033:role/amplify-mifedha1a-mifedha-c789c-unauthRole",
+      "AuthRoleArn": "arn:aws:iam::870395359033:role/amplify-mifedha1a-mifedha-c789c-authRole",
+      "Region": "us-east-1",
+      "DeploymentBucketName": "amplify-mifedha1a-mifedha-c789c-deployment",
+      "UnauthRoleName": "amplify-mifedha1a-mifedha-c789c-unauthRole",
+      "StackName": "amplify-mifedha1a-mifedha-c789c",
+      "StackId": "arn:aws:cloudformation:us-east-1:870395359033:stack/amplify-mifedha1a-mifedha-c789c/d60117f0-6717-11f0-b1dd-1237f60c2ecb",
+      "AmplifyAppId": "d1arm3vysbz59q"
+    },
+    "categories": {
+      "function": {
+        "mifedhaSendNotification": {
+          "projectId": "mifedha-bd808",
+          "secretsPathAmplifyAppId": "d1arm3vysbz59q",
+          "deploymentBucketName": "amplify-mifedha1a-mifedha-c789c-deployment",
+          "s3Key": "amplify-builds/mifedhaSendNotification-674873486c7662366846-build.zip"
+        }
+      },
+      "hosting": {
+        "amplifyhosting": {
+          "appId": "d1arm3vysbz59q",
+          "type": "manual"
+        }
+      },
+      "auth": {
+        "mifedha1a2418a4fd": {},
+        "userPoolGroups": {}
+      },
+      "storage": {
+        "MifedhaPhotos": {}
+      }
+    }
+  }
+}

@@ -1,20 +1,41 @@
-import { StatusBar } from 'expo-status-bar';
-import { StyleSheet, Text, View } from 'react-native';
+import 'react-native-gesture-handler';
+import 'react-native-get-random-values';
+import 'react-native-url-polyfill/auto';
 
-export default function App() {
+import { StatusBar } from 'expo-status-bar';
+import React, { useEffect, useState } from 'react';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { View, ActivityIndicator } from 'react-native';
+import useColorScheme from './hooks/useColorScheme';
+import RootNav from './navigation/RootNav';
+import { Amplify } from 'aws-amplify';
+import awsconfig from './src/aws-exports';
+import { Authenticator, useAuthenticator } from '@aws-amplify/ui-react-native';
+
+Amplify.configure(awsconfig);
+
+function AuthenticatedApp() {
+  const { user, signOut } = useAuthenticator();
+  const colorScheme = useColorScheme();
+
   return (
-    <View style={styles.container}>
-      <Text>Open up App.tsx to start working on your app!</Text>
-      <StatusBar style="auto" />
-    </View>
+    <SafeAreaProvider>
+      <RootNav
+        colorScheme={colorScheme}
+        user={user}
+        signOut={signOut}
+      />
+      <StatusBar />
+    </SafeAreaProvider>
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#fff',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-});
+export default function App() {
+  return (
+    <Authenticator.Provider>
+      <Authenticator>
+        <AuthenticatedApp />
+      </Authenticator>
+    </Authenticator.Provider>
+  );
+}

@@ -8,29 +8,42 @@ import {
   TextInput,
   ActivityIndicator,
   Image,
-  Alert,
+  Alert
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRoute } from '@react-navigation/native';
-import { Auth, graphqlOperation, API, Storage } from 'aws-amplify';
 import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
-
 import { createChamaAdminLnApply } from '../../../../src/graphql/mutations';
-import { getGroup, getSMAccount } from '../../../../src/graphql/queries';
 import {
+  getGroup,
+  getSMAccount,
   listMinutesByChama,
   listMinuteItemsByMinutes,
-  listAttendanceByMinutes,
+  listAttendanceByMinutes
 } from '../../../../src/graphql/queries';
+import { generateClient } from 'aws-amplify/api';
+import { getCurrentUser, fetchUserAttributes } from 'aws-amplify/auth';
+import { uploadData, getUrl } from 'aws-amplify/storage';
 
+const client = generateClient();
 const MAX_IMAGE_SIZE_MB = 5;
+
+/* =========================
+   SAFE IMAGE COMPONENT
+   ========================= */
+const SafeImage = ({ uri, style }: { uri?: string; style: any }) => {
+  if (!uri || typeof uri !== 'string' || uri.trim() === '') {
+    return <Text style={styles.decision}>Not signed</Text>;
+  }
+  return <Image source={{ uri }} style={style} />;
+};
 
 /** =====================
  *  INLINE VIEW MINUTES MODAL
  *  ===================== */
 const ViewMinutesModal = ({ visible, onClose, grpContact, onSelect }) => {
-  const [minutesList, setMinutesList] = useState([]);
+  const [minutesList, setMinutesList] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -39,31 +52,38 @@ const ViewMinutesModal = ({ visible, onClose, grpContact, onSelect }) => {
 
   const fetchMinutes = async () => {
     try {
-      const res: any = await API.graphql(
-        graphqlOperation(listMinutesByChama, { grpContact, sortDirection: 'DESC' })
-      );
-      const minutes = res.data.listMinutesByChama.items || [];
-
+      const res: any = await client.graphql({
+        query: listMinutesByChama,
+        variables: { grpContact, sortDirection: 'DESC' }
+      });
+      const minutes = res?.data?.listMinutesByChama?.items || [];
       const enriched = await Promise.all(
-        minutes.map(async (min) => {
+        minutes.map(async (min: any) => {
           const [itemsRes, attendanceRes] = await Promise.all([
-            API.graphql(graphqlOperation(listMinuteItemsByMinutes, { minutesId: min.id })),
-            API.graphql(graphqlOperation(listAttendanceByMinutes, { minutesId: min.id })),
+            client.graphql({
+              query: listMinuteItemsByMinutes,
+              variables: { minutesId: min.id }
+            }),
+            client.graphql({
+              query: listAttendanceByMinutes,
+              variables: { minutesId: min.id }
+            })
           ]);
-
-          const chairSignUrl = min.chairpersonId ? await Storage.get(min.chairpersonId) : null;
-          const secSignUrl = min.secretaryId ? await Storage.get(min.secretaryId) : null;
-
+          const chairSignUrl = min.chairpersonId
+            ? (await getUrl({ key: min.chairpersonId }))?.url
+            : null;
+          const secSignUrl = min.secretaryId
+            ? (await getUrl({ key: min.secretaryId }))?.url
+            : null;
           return {
             ...min,
-            items: itemsRes.data.listMinuteItemsByMinutes.items || [],
-            attendance: attendanceRes.data.listAttendanceByMinutes.items || [],
+            items: itemsRes?.data?.listMinuteItemsByMinutes?.items || [],
+            attendance: attendanceRes?.data?.listAttendanceByMinutes?.items || [],
             chairSignUrl,
-            secSignUrl,
+            secSignUrl
           };
         })
       );
-
       setMinutesList(enriched);
     } catch (err) {
       console.error('Error fetching minutes:', err);
@@ -74,7 +94,6 @@ const ViewMinutesModal = ({ visible, onClose, grpContact, onSelect }) => {
   };
 
   if (!visible) return null;
-
   if (loading) {
     return (
       <View style={styles.modalCenter}>
@@ -87,31 +106,41 @@ const ViewMinutesModal = ({ visible, onClose, grpContact, onSelect }) => {
     <ScrollView style={styles.modalContainer}>
       <Text style={styles.modalTitle}>Select Loan Minutes</Text>
 
-      {minutesList.map((min) => {
-        const presentCount = min.attendance.filter((a) => a.attendanceStatus === 'PRESENT').length;
+      {minutesList.map((min: any) => {
+        const presentCount = (min.attendance || []).filter(
+          (a: any) => a.attendanceStatus === 'PRESENT'
+        ).length;
         return (
           <View key={min.id} style={styles.modalCard}>
             <Text style={styles.date}>📅 {min.meetingDate}</Text>
-            <Text style={styles.meta}>Venue: {min.venue}</Text>
+            <Text style={styles.meta}>Venue: {min.venue || '-'}</Text>
             <Text style={styles.meta}>Attendance: {presentCount}</Text>
 
             <Text style={styles.section}>Minutes</Text>
-            {min.items
-              .sort((a, b) => a.entryOrder - b.entryOrder)
-              .map((item) => (
+            {(min.items || [])
+              .sort((a: any, b: any) => (a.entryOrder || 0) - (b.entryOrder || 0))
+              .map((item: any) => (
                 <View key={item.id} style={styles.minuteItem}>
                   <Text style={styles.minuteTitle}>
                     {item.entryOrder}. {item.minuteRef}
                   </Text>
                   <Text>{item.content}</Text>
-                  {item.decision && <Text style={styles.decision}>Decision: {item.decision}</Text>}
+                  {item.decision && (
+                    <Text style={styles.decision}>Decision: {item.decision}</Text>
+                  )}
                 </View>
               ))}
 
             <Text style={styles.section}>Signatures</Text>
             <View style={styles.signatures}>
-              {min.chairSignUrl && <Image source={{ uri: min.chairSignUrl }} style={styles.signature} />}
-              {min.secSignUrl && <Image source={{ uri: min.secSignUrl }} style={styles.signature} />}
+              <View style={{ alignItems: 'center' }}>
+                <Text style={styles.meta}>Chairperson</Text>
+                <SafeImage uri={min.chairSignUrl} style={styles.signature} />
+              </View>
+              <View style={{ alignItems: 'center' }}>
+                <Text style={styles.meta}>Secretary</Text>
+                <SafeImage uri={min.secSignUrl} style={styles.signature} />
+              </View>
             </View>
 
             <TouchableOpacity
@@ -144,12 +173,9 @@ const CreateBiz = () => {
   const [pword, setPW] = useState('');
   const [grpMinutes, setGrpMinutes] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-
   const [minutesPhotoKey, setMinutesPhotoKey] = useState<string | null>(null);
   const [minutesPhotoUri, setMinutesPhotoUri] = useState<string | null>(null);
-
   const [minutesModalVisible, setMinutesModalVisible] = useState(false);
-
   const route = useRoute();
 
   /** IMAGE HANDLING **/
@@ -158,9 +184,11 @@ const CreateBiz = () => {
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsEditing: false,
       aspect: [4, 3],
-      quality: 1,
+      quality: 1
     });
-    if (!result.canceled && result.assets?.[0]?.uri) handleImage(result.assets[0].uri);
+    if (!result.canceled && result.assets?.[0]?.uri) {
+      handleImage(result.assets[0].uri);
+    }
   };
 
   const takePhoto = async () => {
@@ -168,28 +196,36 @@ const CreateBiz = () => {
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsEditing: false,
       aspect: [4, 3],
-      quality: 1,
+      quality: 1
     });
-    if (!result.canceled && result.assets?.[0]?.uri) handleImage(result.assets[0].uri);
+    if (!result.canceled && result.assets?.[0]?.uri) {
+      handleImage(result.assets[0].uri);
+    }
   };
 
   const handleImage = async (uri: string) => {
     try {
-      const manipResult = await ImageManipulator.manipulateAsync(uri, [{ resize: { width: 800 } }], {
-        compress: 0.7,
-        format: ImageManipulator.SaveFormat.JPEG,
-      });
-
+      const manipResult = await ImageManipulator.manipulateAsync(
+        uri,
+        [{ resize: { width: 800 } }],
+        { compress: 0.7, format: ImageManipulator.SaveFormat.JPEG }
+      );
       const response = await fetch(manipResult.uri);
       const blob = await response.blob();
       const imageSizeMB = blob.size / (1024 * 1024);
       if (imageSizeMB > MAX_IMAGE_SIZE_MB) {
-        Alert.alert('Image too large', `Image is ${imageSizeMB.toFixed(2)}MB. Max ${MAX_IMAGE_SIZE_MB}MB.`);
+        Alert.alert(
+          'Image too large',
+          `Image is ${imageSizeMB.toFixed(2)}MB. Max ${MAX_IMAGE_SIZE_MB}MB.`
+        );
         return;
       }
-
       const filename = `${Date.now()}_minutes.jpg`;
-      await Storage.put(filename, blob, { contentType: 'image/jpeg' });
+      await uploadData({
+        key: filename,
+        data: blob,
+        options: { contentType: 'image/jpeg' }
+      }).result;
       setMinutesPhotoKey(filename);
       setMinutesPhotoUri(manipResult.uri);
       Alert.alert('Success', 'Minutes image uploaded successfully.');
@@ -208,23 +244,24 @@ const CreateBiz = () => {
   const gtUser = async () => {
     if (isLoading) return;
     setIsLoading(true);
-
     try {
-      const userInfo = await Auth.currentAuthenticatedUser();
-      const compDtls: any = await API.graphql(
-        graphqlOperation(getSMAccount, { awsemail: userInfo.attributes.email })
-      );
-      const pws = compDtls.data.getSMAccount.pw;
-
+      const user = await getCurrentUser();
+      const attributes = await fetchUserAttributes();
+      const compDtls: any = await client.graphql({
+        query: getSMAccount,
+        variables: { awsemail: attributes.email }
+      });
+           const pws = compDtls.data.getSMAccount.pw;
       if (pws !== pword) {
         Alert.alert('Wrong password');
         setIsLoading(false);
         return;
       }
 
-      const accountDtl: any = await API.graphql(
-        graphqlOperation(getGroup, { grpContact: route.params.grpContact })
-      );
+      const accountDtl: any = await client.graphql({
+        query: getGroup,
+        variables: { grpContact: route.params.grpContact }
+      });
       const GrpDtls = accountDtl.data.getGroup;
 
       if (!grpMinutes && !minutesPhotoKey) {
@@ -233,18 +270,19 @@ const CreateBiz = () => {
         return;
       }
 
-      await API.graphql(
-        graphqlOperation(createChamaAdminLnApply, {
+      await client.graphql({
+        query: createChamaAdminLnApply,
+        variables: {
           input: {
             grpName: GrpDtls.grpName,
-            ChamaAdminEmail: userInfo.attributes.email,
+            ChamaAdminEmail: attributes.email,
             GrpAccount: GrpDtls.grpContact,
             MemberEmail: minutesPhotoKey ? minutesPhotoKey : 'NoMinutesUploaded',
             grpMinutes: grpMinutes ? grpMinutes : 'NoMinutesProvided',
-            status: 'AccountActive',
-          },
-        })
-      );
+            status: 'AccountActive'
+          }
+        }
+      });
 
       Alert.alert('Success', 'Loan floated successfully.');
       setPW('');
@@ -260,12 +298,22 @@ const CreateBiz = () => {
 
   /** UI **/
   return (
-    <LinearGradient colors={['skyblue', '#e58d29']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={{ flex: 1 }}>
-      <ScrollView contentContainerStyle={styles.scrollContainer} keyboardShouldPersistTaps="handled">
+    <LinearGradient
+      colors={['skyblue', '#e58d29']}
+      start={{ x: 0, y: 0 }}
+      end={{ x: 1, y: 1 }}
+      style={{ flex: 1 }}
+    >
+      <ScrollView
+        contentContainerStyle={styles.scrollContainer}
+        keyboardShouldPersistTaps="handled"
+      >
         {/* HEADER */}
         <View style={styles.header}>
           <Text style={styles.headerTitle}>Float Loans</Text>
-          <Text style={styles.headerSubtitle}>Please fill in all required details carefully</Text>
+          <Text style={styles.headerSubtitle}>
+            Please fill in all required details carefully
+          </Text>
         </View>
 
         {/* FORM CARD */}
@@ -277,7 +325,9 @@ const CreateBiz = () => {
               onPress={() => setMinutesModalVisible(true)}
             >
               <Text style={{ color: grpMinutes ? '#111' : '#6b7280' }}>
-                {grpMinutes ? `Minutes Selected: ${grpMinutes}` : 'Select Loan Minutes'}
+                {grpMinutes
+                  ? `Minutes Selected: ${grpMinutes}`
+                  : 'Select Loan Minutes'}
               </Text>
             </TouchableOpacity>
             <Text style={styles.helperText}>Loan Minutes</Text>
@@ -304,7 +354,10 @@ const CreateBiz = () => {
               </Text>
             </TouchableOpacity>
 
-            <TouchableOpacity onPress={takePhoto} style={[styles.submitButton, { marginTop: 10 }]}>
+            <TouchableOpacity
+              onPress={takePhoto}
+              style={[styles.submitButton, { marginTop: 10 }]}
+            >
               <Text style={styles.submitButtonText}>Take Photo of Minutes</Text>
             </TouchableOpacity>
           </View>
@@ -314,12 +367,29 @@ const CreateBiz = () => {
             <View style={{ marginTop: 16, alignItems: 'center' }}>
               <Image
                 source={{ uri: minutesPhotoUri }}
-                style={{ width: 200, height: 150, borderRadius: 12, borderWidth: 1, borderColor: '#e5e7eb' }}
+                style={{
+                  width: 200,
+                  height: 150,
+                  borderRadius: 12,
+                  borderWidth: 1,
+                  borderColor: '#e5e7eb'
+                }}
                 resizeMode="cover"
               />
-              <Text style={{ marginTop: 8, fontSize: 12, color: '#6b7280' }}>Preview of uploaded minutes</Text>
+              <Text
+                style={{
+                  marginTop: 8,
+                  fontSize: 12,
+                  color: '#6b7280'
+                }}
+              >
+                Preview of uploaded minutes
+              </Text>
 
-              <TouchableOpacity onPress={clearMinutesImage} style={styles.removeButton}>
+              <TouchableOpacity
+                onPress={clearMinutesImage}
+                style={styles.removeButton}
+              >
                 <Text style={styles.removeButtonText}>Remove Image</Text>
               </TouchableOpacity>
             </View>
@@ -327,9 +397,15 @@ const CreateBiz = () => {
         </View>
 
         {/* SUBMIT */}
-        <TouchableOpacity style={styles.submitButton} onPress={gtUser} activeOpacity={0.85}>
+        <TouchableOpacity
+          style={styles.submitButton}
+          onPress={gtUser}
+          activeOpacity={0.85}
+        >
           <Text style={styles.submitButtonText}>Click to Float Loans</Text>
-          {isLoading && <ActivityIndicator color="#fff" style={{ marginLeft: 10 }} />}
+          {isLoading && (
+            <ActivityIndicator color="#fff" style={{ marginLeft: 10 }} />
+          )}
         </TouchableOpacity>
 
         {/* MINUTES MODAL */}
@@ -337,7 +413,7 @@ const CreateBiz = () => {
           visible={minutesModalVisible}
           onClose={() => setMinutesModalVisible(false)}
           grpContact={route.params.grpContact}
-          onSelect={(id) => setGrpMinutes(id)}
+          onSelect={(id: string) => setGrpMinutes(id)}
         />
       </ScrollView>
     </LinearGradient>
@@ -350,29 +426,165 @@ export default CreateBiz;
  *  STYLES
  *  ===================== */
 const styles = StyleSheet.create({
-  scrollContainer: { padding: 16, paddingBottom: 40 },
-  header: { marginTop: 40, marginBottom: 24 },
-  headerTitle: { fontSize: 28, fontWeight: '800', color: '#ffffff' },
-  headerSubtitle: { fontSize: 14, color: '#eef6ff', marginTop: 6 },
-  formCard: { backgroundColor: '#ffffff', borderRadius: 20, padding: 18, marginBottom: 30, elevation: 6, shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 12, shadowOffset: { width: 0, height: 6 } },
-  inputGroup: { marginBottom: 16 },
-  input: { backgroundColor: '#f9fafb', borderRadius: 14, paddingHorizontal: 16, paddingVertical: 14, fontSize: 15, borderWidth: 1, borderColor: '#e5e7eb', color: '#111827' },
-  helperText: { fontSize: 12, marginTop: 6, color: '#6b7280' },
-  submitButton: { backgroundColor: '#e58d29', borderRadius: 18, paddingVertical: 16, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', elevation: 4, shadowColor: '#e58d29', shadowOpacity: 0.4, shadowRadius: 8, shadowOffset: { width: 0, height: 4 } },
-  submitButtonText: { color: '#ffffff', fontSize: 16, fontWeight: '700', letterSpacing: 0.6 },
-  removeButton: { marginTop: 10, backgroundColor: '#e58d29', paddingVertical: 8, paddingHorizontal: 16, borderRadius: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', elevation: 4, shadowColor: '#e58d29', shadowOpacity: 0.4, shadowRadius: 6, shadowOffset: { width: 0, height: 3 } },
-
+  scrollContainer: {
+    padding: 16,
+    paddingBottom: 40
+  },
+  header: {
+    marginTop: 40,
+    marginBottom: 24
+  },
+  headerTitle: {
+    fontSize: 28,
+    fontWeight: '800',
+    color: '#ffffff'
+  },
+  headerSubtitle: {
+    fontSize: 14,
+    color: '#eef6ff',
+    marginTop: 6
+  },
+  formCard: {
+    backgroundColor: '#ffffff',
+    borderRadius: 20,
+    padding: 18,
+    marginBottom: 30,
+    elevation: 6,
+    shadowColor: '#000',
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 6 }
+  },
+  inputGroup: {
+    marginBottom: 16
+  },
+  input: {
+    backgroundColor: '#f9fafb',
+    borderRadius: 14,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    fontSize: 15,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    color: '#111827'
+  },
+  helperText: {
+    fontSize: 12,
+    marginTop: 6,
+    color: '#6b7280'
+  },
+  submitButton: {
+    backgroundColor: '#e58d29',
+    borderRadius: 18,
+    paddingVertical: 16,
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'center',
+    elevation: 4,
+    shadowColor: '#e58d29',
+    shadowOpacity: 0.4,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 }
+  },
+  submitButtonText: {
+    color: '#ffffff',
+    fontSize: 16,
+    fontWeight: '700',
+    letterSpacing: 0.6
+  },
+  removeButton: {
+    marginTop: 10,
+    backgroundColor: '#e58d29',
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    elevation: 4,
+    shadowColor: '#e58d29',
+    shadowOpacity: 0.4,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 3 }
+  },
+  removeButtonText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600'
+  },
   /** MODAL STYLES **/
-  modalContainer: { maxHeight: '80%', backgroundColor: '#f8f9fa', padding: 16 },
-  modalTitle: { fontSize: 20, fontWeight: 'bold', marginBottom: 16, color: '#212529' },
-  modalCard: { backgroundColor: '#fff', borderRadius: 12, padding: 16, marginBottom: 20, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 6, elevation: 3 },
-  date: { fontSize: 15, fontWeight: '600', color: '#495057' },
-  meta: { fontSize: 14, color: '#6c757d', marginTop: 2 },
-  section: { fontSize: 18, fontWeight: '700', marginTop: 16, marginBottom: 8, color: '#343a40' },
-  minuteItem: { paddingVertical: 10, borderBottomWidth: 0.5, borderBottomColor: '#dee2e6' },
-  minuteTitle: { fontSize: 15, fontWeight: '600', marginBottom: 4, color: '#212529' },
-  decision: { marginTop: 4, fontStyle: 'italic', color: '#0f5132' },
-  signatures: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 12 },
-  signature: { width: 140, height: 70, resizeMode: 'contain', borderWidth: 1, borderColor: '#ced4da', borderRadius: 6, backgroundColor: '#fff' },
-  modalCenter: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  modalContainer: {
+    maxHeight: '80%',
+    backgroundColor: '#f8f9fa',
+    padding: 16
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    marginBottom: 16,
+    color: '#212529'
+  },
+  modalCard: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    elevation: 3
+  },
+  date: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#495057'
+  },
+  meta: {
+    fontSize: 14,
+    color: '#6c757d',
+    marginTop: 2
+  },
+  section: {
+    fontSize: 18,
+    fontWeight: '700',
+    marginTop: 16,
+    marginBottom: 8,
+    color: '#343a40'
+  },
+  minuteItem: {
+    paddingVertical: 10,
+    borderBottomWidth: 0.5,
+    borderBottomColor: '#dee2e6'
+  },
+  minuteTitle: {
+    fontSize: 15,
+    fontWeight: '600',
+    marginBottom: 4,
+    color: '#212529'
+  },
+   decision: {
+    marginTop: 4,
+    fontStyle: 'italic',
+    color: '#0f5132'
+  },
+  signatures: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 12
+  },
+  signature: {
+    width: 140,
+    height: 70,
+    resizeMode: 'contain',
+    borderWidth: 1,
+    borderColor: '#ced4da',
+    borderRadius: 6,
+    backgroundColor: '#fff'
+  },
+  modalCenter: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center'
+  }
 });

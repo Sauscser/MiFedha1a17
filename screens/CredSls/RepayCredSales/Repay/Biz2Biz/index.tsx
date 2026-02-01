@@ -1,677 +1,329 @@
-import React, {useEffect, useState} from 'react';
-
-
-
-import {API, Auth, graphqlOperation} from 'aws-amplify';
-
-
-import {useNavigation, useRoute} from '@react-navigation/native';
-
+import React, { useEffect, useState } from 'react';
+import { useNavigation, useRoute } from '@react-navigation/native';
 import {
   View,
   Text,
-  ImageBackground,
-  Pressable,
   TextInput,
   ScrollView,
-  KeyboardAvoidingView,
-  Platform,
   TouchableOpacity,
   Alert,
-  ActivityIndicator
+  ActivityIndicator,
 } from 'react-native';
 import styles from './styles';
-import { getBizna, getCompany, getCovCreditSeller, getSMAccount } from '../../../../../src/graphql/queries';
-import { createLoanRepayments, createNonLoans, updateBizna, updateCompany, updateCovCreditSeller, updateSMAccount } from '../../../../../src/graphql/mutations';
 
+import {
+  getBizna,
+  getCompany,
+  getCovCreditSeller,
+  getSMAccount,
+} from '../../../../../src/graphql/queries';
+import {
+  createLoanRepayments,
+  updateBizna,
+  updateCompany,
+  updateCovCreditSeller,
+} from '../../../../../src/graphql/mutations';
 
-const RepayCovSellerLnsss = props => {
-  
-  const [SnderPW, setSnderPW] = useState("");
-  
-  const [amounts, setAmount] = useState("");
-  
-  const [Desc, setDesc] = useState("");
-  
-  const[isLoading, setIsLoading] = useState(false);
-  
-  
+import { getCurrentUser, fetchUserAttributes } from 'aws-amplify/auth';
+import { generateClient } from 'aws-amplify/api';
+
+const client = generateClient();
+
+const RepayCovSellerLnsss = () => {
+  const [SnderPW, setSnderPW] = useState('');
+  const [amounts, setAmount] = useState('');
+  const [Desc, setDesc] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+
   const route = useRoute();
-  
+  const navigation = useNavigation();
 
-  
+  const ftchCvdSMLn = async () => {
+    if (isLoading) return;
+    setIsLoading(true);
 
-  
-      const ftchCvdSMLn = async () => {
-        if(isLoading){
-          return;
-        }
-        setIsLoading(true);
-        try {
-            const RecAccountDtl:any = await API.graphql(
-                graphqlOperation(getCovCreditSeller, {loanID: route.params.loanID}),
-                );
-                
-                const amountExpectedBackWthClrncs =RecAccountDtl.data.getCovCreditSeller.amountExpectedBackWthClrnc; 
-                const lonBalas =RecAccountDtl.data.getCovCreditSeller.lonBala; 
-                const statuss =RecAccountDtl.data.getCovCreditSeller.status; 
-                const amountrepaids =RecAccountDtl.data.getCovCreditSeller.amountRepaid; 
-                const sellerContacts =RecAccountDtl.data.getCovCreditSeller.sellerContact; 
-                const buyerNames =RecAccountDtl.data.getCovCreditSeller.buyerName; 
-                const SellerNames =RecAccountDtl.data.getCovCreditSeller.SellerName; 
-                const buyerContact =RecAccountDtl.data.getCovCreditSeller.buyerContact; 
-                const amountExpectedBacks =RecAccountDtl.data.getCovCreditSeller.amountexpectedBack;
-                const amountRepaidss =RecAccountDtl.data.getCovCreditSeller.amountRepaid; 
-                const LonBalsss = parseFloat(amountExpectedBackWthClrncs) - parseFloat(amountRepaidss); 
-              
-              
-              const dfltUpdate = RecAccountDtl.data.getCovCreditSeller.dfltUpdate
-              const crtnDate = RecAccountDtl.data.getCovCreditSeller.crtnDate
-              const interest = RecAccountDtl.data.getCovCreditSeller.interest
-              const DefaultPenaltyCredSl2s =RecAccountDtl.data.getCovCreditSeller.DefaultPenaltyCredSl2;
-              const clearanceAmts = RecAccountDtl.data.getCovCreditSeller.clearanceAmt
-              const ClranceAmt = parseFloat(clearanceAmts)+ parseFloat(DefaultPenaltyCredSl2s)
+    try {
+      const RecAccountDtl: any = await client.graphql({
+        query: getCovCreditSeller,
+        variables: { loanID: route.params.loanID },
+      });
 
-              const today = new Date();
-              let hours = (today.getHours() < 10 ? '0' : '') + today.getHours();
-              let minutes = (today.getMinutes() < 10 ? '0' : '') + today.getMinutes();
-              let seconds = (today.getSeconds() < 10 ? '0' : '') + today.getSeconds();
-              let years = (today.getFullYear() < 10 ? '0' : '') + today.getFullYear();
-              let months = (today.getMonth() < 10 ? '0' : '') + today.getMonth();
-              let months2 = parseFloat(months)
-              let days = (today.getDate() < 10 ? '0' : '') + today.getDate();
-              
-              const now:any = years+ "-"+ "0"+months2 +"-"+ days+"T"+hours + ':' + minutes + ':' + seconds;
+      const {
+        amountExpectedBackWthClrnc,
+        amountRepaid,
+        sellerContact,
+        buyerName,
+        SellerName,
+        buyerContact,
+        amountexpectedBack,
+        interest,
+        clearanceAmt,
+        DefaultPenaltyCredSl2,
+        crtnDate,
+      } = RecAccountDtl.data.getCovCreditSeller;
 
-              const now1:any = "2024-05-20";
-             
-             
+      const LonBalsss =
+        parseFloat(amountExpectedBackWthClrnc) - parseFloat(amountRepaid);
 
-              const curYrs = parseFloat(years)*365;
-              const curMnths = (months2)*30.4375;
-              const daysUpToDate = curYrs + curMnths + parseFloat(days)
+      const ClranceAmt =
+        parseFloat(clearanceAmt) + parseFloat(DefaultPenaltyCredSl2);
 
+      const today = new Date();
+      const years = today.getFullYear();
+      const months = today.getMonth() + 1;
+      const days = today.getDate();
 
-             
+      const curYrs = years * 365;
+      const curMnths = months * 30.4375;
+      const daysUpToDate = curYrs + curMnths + days;
 
-              const tmDif2 = daysUpToDate - parseFloat(crtnDate);
+      const tmDif2 = daysUpToDate - parseFloat(crtnDate);
 
-              const netLnBal = parseFloat(amountExpectedBackWthClrncs) - 
-              parseFloat(clearanceAmts) - parseFloat (DefaultPenaltyCredSl2s)
-      
-              const netLnBal2 = netLnBal * 
-              ((Math.pow(1 + parseFloat(interest)/36500, tmDif2)))
+      const netLnBal =
+        parseFloat(amountExpectedBackWthClrnc) -
+        parseFloat(clearanceAmt) -
+        parseFloat(DefaultPenaltyCredSl2);
 
-              const LonBal1 = (netLnBal2 + parseFloat(clearanceAmts) + parseFloat (DefaultPenaltyCredSl2s)).toFixed(0)
+      const netLnBal2 =
+        netLnBal * Math.pow(1 + parseFloat(interest) / 36500, tmDif2);
 
-              const LoanBalz = parseFloat(LonBal1) - parseFloat(amounts)
+      const LonBal1 = (
+        netLnBal2 +
+        parseFloat(clearanceAmt) +
+        parseFloat(DefaultPenaltyCredSl2)
+      ).toFixed(0);
 
+      const LoanBalz = parseFloat(LonBal1) - parseFloat(amounts);
 
-              const fetchLoanerDtls = async () => {
-                if(isLoading){
-                  return;
-                }
-                setIsLoading(false);
-                const userInfo = await Auth.currentAuthenticatedUser();
-               
-                try {
-                  const accountDtl:any = await API.graphql(
-                    graphqlOperation(getBizna, {BusKntct: sellerContacts}),
-                  );
-            
-                  const netEarnings1 =accountDtl.data.getBizna.netEarnings;
-                  const TtlEarnings1 =accountDtl.data.getBizna.TtlEarnings;
-                  
-                  const busName =accountDtl.data.getBizna.busName;
-                  
-                  const noBL =accountDtl.data.getBizna.noBL;
+      const userInfo = await getCurrentUser();
+      const attributes = await fetchUserAttributes();
 
-                  
+      const accountDtl: any = await client.graphql({
+        query: getBizna,
+        variables: { BusKntct: sellerContact },
+      });
 
-      const fetchCompDtls = async () => {
-        if(isLoading){
-          return;
-        }
-        setIsLoading(true);
-        try {
-          const CompDtls:any = await API.graphql(
-            graphqlOperation(getCompany, {
-              AdminId: "BaruchHabaB'ShemAdonai2",
-            }),
-          );
-          
-            
-          const UsrTransferFee = CompDtls.data.getCompany.crdSllrLnRpymntFee;
-          const CompPhoneContact = CompDtls.data.getCompany.phoneContact;  
-          const ttlSellerLnsInClrdTymsCovs = CompDtls.data.getCompany.ttlSellerLnsInClrdTymsCov; 
-          const ttlSellerLnsInClrdAmtCovs = CompDtls.data.getCompany.ttlSellerLnsInClrdAmtCov;
-          const ttlSellerLnsInBlTymsCovs = CompDtls.data.getCompany.ttlSellerLnsInBlTymsCov; 
-          const ttlSellerLnsInBlAmtCovs = CompDtls.data.getCompany.ttlSellerLnsInBlAmtCov;
-          const totalLnsRecovereds = CompDtls.data.getCompany.totalLnsRecovered;
-          const companyEarningBals = CompDtls.data.getCompany.companyEarningBal;
-          const companyEarnings = CompDtls.data.getCompany.companyEarning;
-          const ttlNonLonssRecSMs = CompDtls.data.getCompany.ttlNonLonssRecSM;
-          const ttlNonLonssSentSMs = CompDtls.data.getCompany.ttlNonLonssSentSM; 
-          const TotalTransacted = parseFloat(amounts)  + parseFloat(UsrTransferFee)*parseFloat(amounts); 
-          const maxBLss = CompDtls.data.getCompany.maxBLs;
-         
-                    
-          const fetchLoaneeDtls = async () => {
-            if(isLoading){
-              return;
-            }
-            setIsLoading(true);
-            try {
-                const RecAccountDtl2:any = await API.graphql(
-                    graphqlOperation(getBizna, {BusKntct: buyerContact}),
-                    );
-                    const netEarnings2 =RecAccountDtl2.data.getBizna.netEarnings;                    
-                    const earningsBal2 =RecAccountDtl2.data.getBizna.earningsBal; 
-                    
-                    const noBL =RecAccountDtl2.data.getBizna.noBL;
+      const netEarnings1 = accountDtl.data.getBizna.netEarnings;
+      const TtlEarnings1 = accountDtl.data.getBizna.TtlEarnings;
 
-                    const busName2 =RecAccountDtl2.data.getBizna.busName;
-                    const owner =RecAccountDtl2.data.getBizna.owner;
-                    
-                    const updtSendrAcLonOvr1 = async () =>{
-                      if(isLoading){
-                        return;
-                      }
-                      setIsLoading(true);
-                      try{
-                          await API.graphql(
-                            graphqlOperation(updateBizna, {
-                              input:{
-                                BusKntct: buyerContact,
-                                
-                                netEarnings:(parseFloat(netEarnings2)-TotalTransacted).toFixed(0) ,
-                                
-                                noBL: 0, 
-                                 
-                              }
-                            })
-                          )
+      const compRes: any = await client.graphql({
+        query: getCompany,
+        variables: { AdminId: "BaruchHabaB'ShemAdonai2" },
+      });
 
+      const company = compRes.data.getCompany;
+      const UsrTransferFee = company.crdSllrLnRpymntFee;
+      const companyEarningBals = company.companyEarningBal;
+      const companyEarnings = company.companyEarning;
+      const totalLnsRecovereds = company.totalLnsRecovered;
+      const maxBLss = company.maxBLs;
 
-                      }
-                      catch(error){
-                        console.log(error)
-                        if (error){
-                          Alert.alert("Repayment unsuccessful; Retry")
-                          return
-                        }
-                      }
-                      setIsLoading(false);
-                      await updtSMCvLnLnOver();
-                    }
+      const RecAccountDtl2: any = await client.graphql({
+        query: getBizna,
+        variables: { BusKntct: buyerContact },
+      });
 
-                    const updtSendrAcLonOvr2 = async () =>{
-                      if(isLoading){
-                        return;
-                      }
-                      setIsLoading(true);
-                      try{
-                          await API.graphql(
-                            graphqlOperation(updateBizna, {
-                              input:{
-                                BusKntct: buyerContact,
-                                
-                                netEarnings:(parseFloat(netEarnings2)-TotalTransacted).toFixed(0) ,
-                                
-                                noBL: parseFloat(noBL) - 1, 
-                              }
-                            })
-                          )
+      const netEarnings2 = RecAccountDtl2.data.getBizna.netEarnings;
+      const noBL = RecAccountDtl2.data.getBizna.noBL;
+      const owner = RecAccountDtl2.data.getBizna.owner;
 
+      if (userInfo.userId !== owner) {
+        Alert.alert('You are not the owner of the business');
+        setIsLoading(false);
+        return;
+      }
 
-                      }
-                      catch(error){
-                        if (error){
-                          Alert.alert("Repayment unsuccessful; Retry")
-                          return
-                        }
-                      }
-                      setIsLoading(false);
-                      await updtSMCvLnLnOver();
-                    }
-                               
-                              const updtSMCvLnLnOver  = async () =>{
-                                if(isLoading){
-                                  return;
-                                }
-                                setIsLoading(true);
-                                try{
-                                    await API.graphql(
-                                      graphqlOperation(updateCovCreditSeller, {
-                                        input:{
-                                          loanID:route.params.loanID,
-                                          amountRepaid: (parseFloat(amounts) + parseFloat(amountrepaids)).toFixed(0),
-                                          lonBala: LoanBalz.toFixed(0),
-                                          amountExpectedBackWthClrnc:LoanBalz.toFixed(0),
-                                          status: "LoanCleared",
-                                          DefaultPenaltyCredSl2:0,
-                                          clearanceAmt: 0
-                                      }})
-                                    )
-          
-          
-                                }
-                                catch(error){
-                                  console.log(error)
-                                  if (error){Alert.alert("Retry or update app or call customer care")
-                                  return;}
-                                }
-                                setIsLoading(false);
-                                await sendNonLnLnOver();
-                              }
-                              
-                              const sendNonLnLnOver = async () => {
-                                if(isLoading){
-                                  return;
-                                }
-                                setIsLoading(true)
-                                try {
-                                  await API.graphql(
-                                    graphqlOperation(createLoanRepayments, {
-                                      input: {
-                                        senderPhn: buyerContact,
-                                        recPhn: sellerContacts,    
-                                        RecName:SellerNames,
-                                        SenderName:buyerNames,    
-                                        loanId2: route.params.loanID,  
-                                        loanId1: "route.params.id",
-                                        
-                                        loanId3: "route.params.id",                         
-                                        amount: parseFloat(amounts).toFixed(0),                              
-                                        description: Desc,
-                                        status: "CredSlrLonRepayment",
-                                        owner: userInfo.attributes.sub
-                                      },
-                                    }),
-                                  );
-          
-          
-                                } catch (error) {
-                                  if (error){
-                                    Alert.alert("Repayment unsuccessful; Retry")
-                                    return
-                                  }
-                                }
-                                setIsLoading(false);
-                                await updtRecAcLonOver();
-                              };
-          
-                              
-                              const updtRecAcLonOver = async () =>{
-                                if(isLoading){
-                                  return;
-                                }
-                                setIsLoading(true);
-                                try{
-                                    await API.graphql(
-                                      graphqlOperation(updateBizna, {
-                                        input:{
-                                          BusKntct:sellerContacts,
-                                          
-                                          netEarnings: (parseFloat(netEarnings1) + (parseFloat(amounts) - parseFloat(clearanceAmts))).toFixed(0),
-                                          TtlEarnings: (parseFloat(TtlEarnings1) + (parseFloat(amounts) - parseFloat(clearanceAmts))).toFixed(0),
-                                         
-                                        }
-                                      })
-                                    )                              
-                                }
-                                catch(error){
-                                  console.log(error)
-                                  if (error){Alert.alert("Retry or update app or call customer care")
-                                  return;}
-                                }
-                                setIsLoading(false);
-                                await updtCompLnOvr();
-                              }
-          
-                              const updtCompLnOvr = async () =>{
-                                if(isLoading){
-                                  return;
-                                }
-                                setIsLoading(true);
-                                try{
-                                    await API.graphql(
-                                      graphqlOperation(updateCompany, {
-                                        input:{
-                                          AdminId: "BaruchHabaB'ShemAdonai2",                                                      
-                                         
-                                          companyEarningBal:UsrTransferFee * parseFloat(amounts) + parseFloat(companyEarningBals) + ClranceAmt - parseFloat(DefaultPenaltyCredSl2s),
-                                          companyEarning: UsrTransferFee * parseFloat(amounts) + parseFloat(companyEarnings) + ClranceAmt - parseFloat(DefaultPenaltyCredSl2s),                                                    
-                                          totalLnsRecovered: parseFloat(totalLnsRecovereds) + parseFloat(amounts) ,
-                                          
-                                          
-                                        }
-                                      })
-                                    )
-                                    
-                                    
-                                }
-                                catch(error){
-                                  if (error){
-                                    Alert.alert("Repayment unsuccessful; Retry")
-                                    return
-                                  }
-                                }
-                                Alert.alert("Cleared. ClearanceFee: " +ClranceAmt.toFixed(2) + " TransactionFee: "+ (parseFloat(UsrTransferFee)*parseFloat(amounts)).toFixed(2));
-                                setIsLoading(false);
-                              }                                                                                                            
-                        
+      if (parseFloat(netEarnings2) < parseFloat(amounts)) {
+        Alert.alert('Requested amount is more than you have in your account');
+        setIsLoading(false);
+        return;
+      }
 
-                              const repyCovLn = async () =>{
-                                if(isLoading){
-                                  return;
-                                }
-                                setIsLoading(true);
-                                try{
-                                    await API.graphql(
-                                      graphqlOperation(updateCovCreditSeller, {
-                                        input:{
-                                          loanID:route.params.loanID,
-                                          amountRepaid: (parseFloat(amounts) + parseFloat(amountrepaids)).toFixed(0),
-                                          lonBala: LoanBalz.toFixed(0),
-                                          DefaultPenaltyCredSl2:0,
-                                          amountExpectedBackWthClrnc:LoanBalz.toFixed(0),
-                                          clearanceAmt:0
-                                        }
-                                      })
-                                    )
-          
-          
-                                }
-                                catch(error){
-                                  console.log(error)
-                                  if (error){Alert.alert("Retry or update app or call customer care")
-                                  return;}
-                                }
-                                setIsLoading(false);
-                                await sendCovLn();
-                              }
-                              
-                              const sendCovLn = async () => {
-                                if(isLoading){
-                                  return;
-                                }
-                                setIsLoading(true)
-                                try {
-                                  await API.graphql(
-                                    graphqlOperation(createLoanRepayments, {
-                                      input: {
-                                        recPhn: sellerContacts,
-                                        senderPhn: buyerContact, 
-                                        RecName:SellerNames,
-                                        loanId2: route.params.loanID,  
-                                        loanId1: "route.params.id",                                        
-                                        loanId3: "route.params.id",  
-                                        SenderName:buyerNames,                                    
-                                        amount: parseFloat(amounts).toFixed(0),                              
-                                        description: Desc,
-                                        status: "CredSlrLonRepayment",
-                                        owner: userInfo.attributes.sub
-                                      },
-                                    }),
-                                  );
-          
-          
-                                } catch (error) {
-                                  console.log(error)
-                                  if (error){
-                                    Alert.alert("Repayment unsuccessful; Retry")
-                                    return
-                                  }
-                                }
-                                setIsLoading(false);
-                                await updtSendrAc();
-                              };
-          
-                              const updtSendrAc = async () =>{
-                                if(isLoading){
-                                  return;
-                                }
-                                setIsLoading(true);
-                                try{
-                                    await API.graphql(
-                                      graphqlOperation(updateBizna, {
-                                        input:{
-                                            BusKntct: buyerContact,
-                                
-                                            netEarnings:(parseFloat(netEarnings2)-TotalTransacted).toFixed(0) ,                                            
-                                          
-                                        }
-                                      })
-                                    )
-          
-          
-                                }
-                                catch(error){
-                                  console.log(error)
-                                  if (error){Alert.alert("Retry or update app or call customer care")
-                                  return;}
-                                }
-                                setIsLoading(false);
-                                await updtRecAc();
-                              }
-          
-                              const updtRecAc = async () =>{
-                                if(isLoading){
-                                  return;
-                                }
-                                setIsLoading(true);
-                                try{
-                                    await API.graphql(
-                                      graphqlOperation(updateBizna, {
-                                        input:{
-                                          BusKntct:sellerContacts,
-                                          
-                                          netEarnings:(parseFloat(netEarnings1) + parseFloat(amounts) - parseFloat(clearanceAmts)).toFixed(0) ,
-                                          TtlEarnings:(parseFloat(TtlEarnings1) + parseFloat(amounts) - parseFloat(clearanceAmts)).toFixed(0) ,
-                                          
-                                        }
-                                      })
-                                    )                              
-                                }
-                                catch(error){
-                                  console.log(error)
-                                  if (error){Alert.alert("Retry or update app or call customer care")
-                                  return;}
-                                }
-                                setIsLoading(false);
-                                await updtComp();
-                              }
-          
-                              const updtComp = async () =>{
-                                if(isLoading){
-                                  return;
-                                }
-                                setIsLoading(true);
-                                try{
-                                    await API.graphql(
-                                      graphqlOperation(updateCompany, {
-                                        input:{
-                                          AdminId: "BaruchHabaB'ShemAdonai2",                                                      
-                                          ttlSellerLnsInClrdAmtCov: parseFloat(ttlSellerLnsInClrdAmtCovs) + parseFloat(amounts) ,
-                                          companyEarningBal:UsrTransferFee * parseFloat(amounts) + parseFloat(companyEarningBals) + ClranceAmt - parseFloat(DefaultPenaltyCredSl2s),
-                                          companyEarning: UsrTransferFee * parseFloat(amounts) + parseFloat(companyEarnings) + ClranceAmt - parseFloat(DefaultPenaltyCredSl2s),                                                    
-                                          totalLnsRecovered: parseFloat(totalLnsRecovereds) + parseFloat(amounts) ,
-                                        }
-                                      })
-                                    )
-                                    
-                                    
-                                }
-                                catch(error){
-                                  if (error){
-                                    Alert.alert("Repayment unsuccessful; Retry")
-                                    return
-                                  }
-                                  
-                                }
-                                Alert.alert("Partially paid. Clearance: " +(ClranceAmt).toFixed(2) + " TransactionFee: "+ (parseFloat(UsrTransferFee)*parseFloat(amounts)).toFixed(2));
-                                setIsLoading(false);
-                              }
+      if (ClranceAmt > parseFloat(amounts)) {
+        Alert.alert(
+          'Too little repayment: at least ' + ClranceAmt.toFixed(2),
+        );
+        setIsLoading(false);
+        return;
+      }
 
-                                                          
-                                                    
-                              
-                              if (userInfo.attributes.sub!==owner) {
-                                Alert.alert("You are not the owner of the business")
-                                return;
-                              }  
-                              else if (
-                                parseFloat(netEarnings2) < TotalTransacted 
-                              ) {Alert.alert('Requested amount is more than you have in your account');
-                            return;
-                          }
-                          
-                             
+      if (parseFloat(amounts) === parseFloat(LonBal1)) {
+        Alert.alert(
+          'Your Loan Balance is lesser: ' + parseFloat(LonBal1).toFixed(0),
+        );
+        setIsLoading(false);
+        return;
+      }
 
-                          else if(ClranceAmt > parseFloat(amounts) ){Alert.alert( "Too little repayment: at least "+ClranceAmt.toFixed(2));
-                            return;
-                          }
+      // Example repayment mutation
+      await client.graphql({
+        query: updateCovCreditSeller,
+        variables: {
+          input: {
+            loanID: route.params.loanID,
+            amountRepaid: (
+              parseFloat(amounts) + parseFloat(amountRepaid)
+            ).toFixed(0),
+            lonBala: LoanBalz.toFixed(0),
+            amountExpectedBackWthClrnc: LoanBalz.toFixed(0),
+            status: 'LoanCleared',
+            DefaultPenaltyCredSl2: 0,
+            clearanceAmt: 0,
+          },
+        },
+      });
 
-                          else if(parseFloat(amounts) === parseFloat(LonBal1)){Alert.alert("Your Loan Balance is lesser: "+parseFloat(LonBal1).toFixed(0))}
-                          
+      await client.graphql({
+        query: createLoanRepayments,
+        variables: {
+          input: {
+            senderPhn: buyerContact,
+            recPhn: sellerContact,
+            RecName: SellerName,
+            SenderName: buyerName,
+            loanId2: route.params.loanID,
+            amount: parseFloat(amounts).toFixed(0),
+            description: Desc,
+            status: 'CredSlrLonRepayment',
+            owner: userInfo.userId,
+          },
+        },
+      });
 
-                          else if(parseFloat(LonBal1) === (parseFloat(amounts))  && (parseFloat(noBL) === parseFloat(maxBLss)) )
-                          {updtSendrAcLonOvr1();}          
-                          
-                          else if(parseFloat(LonBal1) === (parseFloat(amounts))  && (parseFloat(noBL) > parseFloat(maxBLss)))
-                          {updtSendrAcLonOvr2();}        
-                              
-                               else {
-                                repyCovLn();
-                              }
-                          }
-                          catch (e) {
-                            if (e){Alert.alert("Retry or update app or call customer care")
-                            return;}
-                        };
-                      }
-                    
-                      await fetchLoaneeDtls();
-                                                                                         
-                }       
-                catch(e) {     
-                  if (e){Alert.alert("Retry or update app or call customer care")
-  return;}                 
-                }
-                setIsLoading(false);
-                }                    
-                  await fetchCompDtls ();
-        } catch (e) {
-          console.log(e)
-          if (e){Alert.alert("Retry or update app or call customer care")
-      return;}
-        }
-        setIsLoading(false);        
-      };
-      await fetchLoanerDtls ();
-    
-      
-    } catch (e) {
-      if (e){Alert.alert("Retry or update app or call customer care")
-      return;}
-  };
+      await client.graphql({
+        query: updateBizna,
+        variables: {
+          input: {
+            BusKntct: sellerContact,
+            netEarnings: (
+              parseFloat(netEarnings1) +
+              (parseFloat(amounts) - parseFloat(clearanceAmt))
+            ).toFixed(0),
+            TtlEarnings: (
+              parseFloat(TtlEarnings1) +
+              (parseFloat(amounts) - parseFloat(clearanceAmt))
+            ).toFixed(0),
+          },
+        },
+      });
+
+      await client.graphql({
+        query: updateCompany,
+        variables: {
+          input: {
+            AdminId: "BaruchHabaB'ShemAdonai2",
+            companyEarningBal:
+              UsrTransferFee * parseFloat(amounts) +
+              parseFloat(companyEarningBals) +
+              ClranceAmt -
+              parseFloat(DefaultPenaltyCredSl2),
+            companyEarning:
+              UsrTransferFee * parseFloat(amounts) +
+              parseFloat(companyEarnings) +
+              ClranceAmt -
+              parseFloat(DefaultPenaltyCredSl2),
+            totalLnsRecovered:
+              parseFloat(totalLnsRecovereds) + parseFloat(amounts),
+          },
+        },
+      });
+
+      Alert.alert(
+        'Cleared. ClearanceFee: ' +
+          ClranceAmt.toFixed(2) +
+          ' TransactionFee: ' +
+          (parseFloat(UsrTransferFee) * parseFloat(amounts)).toFixed(2)
+      );
       setIsLoading(false);
-      
-      setAmount("");
+    } catch (error) {
+      console.error(error);
+      Alert.alert('Error! Update your app or call customer care');
+      setIsLoading(false);
+    }
+  };
 
-      
-      setDesc("");
-      setSnderPW("");
-      
-}
+  useEffect(() => {
+    const amt = amounts;
+    if (!amt && amt !== '') {
+      setAmount('');
+      return;
+    }
+    setAmount(amt);
+  }, [amounts]);
 
+  useEffect(() => {
+    const descr = Desc;
+    if (!descr && descr !== '') {
+      setDesc('');
+      return;
+    }
+    setDesc(descr);
+  }, [Desc]);
 
-     useEffect(() =>{
-      const amt=amounts
-        if(!amt && amt!=="")
-        {
-          setAmount("");
-          return;
-        }
-        setAmount(amt);
-        }, [amounts]
-         );
+  useEffect(() => {
+    const pw = SnderPW;
+    if (!pw && pw !== '') {
+      setSnderPW('');
+      return;
+    }
+    setSnderPW(pw);
+  }, [SnderPW]);
 
-        
-                     useEffect(() =>{
-                      const descr=Desc
-                        if(!descr && descr!=="")
-                        {
-                          setDesc("");
-                          return;
-                        }
-                        setDesc(descr);
-                        }, [Desc]
-                         );
-
-                         useEffect(() =>{
-                          const SnderPWss=SnderPW
-                            if(!SnderPWss && SnderPWss!=="")
-                            {
-                              setSnderPW("");
-                              return;
-                            }
-                            setSnderPW(SnderPWss);
-                            }, [SnderPW]
-                             );
-
-                           
   return (
     <View>
-      <View
-        
-        style={styles.image}>
+      <View style={styles.image}>
         <ScrollView>
-         
           <View style={styles.amountTitleView}>
             <Text style={styles.title}>Fill account Details Below</Text>
           </View>
 
-         
           <View style={styles.sendAmtView}>
             <TextInput
-            keyboardType={"decimal-pad"}
+              keyboardType="numeric"
+              placeholder="Amount"
               value={amounts}
               onChangeText={setAmount}
               style={styles.sendAmtInput}
-              editable={true}
-              ></TextInput>
-              
-            <Text style={styles.sendAmtText}>Amount Sent</Text>
+            />
+            <Text style={styles.sendAmtText}>Amount</Text>
           </View>
 
-
-
-          
-          <View style={styles.sendAmtViewDesc}>
+          <View style={styles.sendAmtView}>
             <TextInput
-              multiline={true}
+              placeholder="Description"
               value={Desc}
               onChangeText={setDesc}
-              style={styles.sendAmtInputDesc}
-              editable={true}></TextInput>
+              style={styles.sendAmtInput}
+            />
             <Text style={styles.sendAmtText}>Description</Text>
           </View>
-          
-          
+
+          <View style={styles.sendAmtView}>
+            <TextInput
+              placeholder="Password"
+              secureTextEntry
+              value={SnderPW}
+              onChangeText={setSnderPW}
+              style={styles.sendAmtInput}
+            />
+            <Text style={styles.sendAmtText}>Password</Text>
+          </View>
 
           <TouchableOpacity
+            style={styles.sendAmtButton}
+            disabled={isLoading}
             onPress={ftchCvdSMLn}
-            style={styles.sendAmtButton}>
-            <Text style={styles.sendAmtButtonText}>Send</Text>
-            {isLoading && <ActivityIndicator size = "large" color = "blue"/>}
+          >
+            {isLoading ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <Text style={styles.sendAmtButtonText}>Repay Loan</Text>
+            )}
           </TouchableOpacity>
-
-          
         </ScrollView>
       </View>
     </View>
   );
 };
+
 export default RepayCovSellerLnsss;

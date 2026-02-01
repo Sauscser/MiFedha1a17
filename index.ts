@@ -1,8 +1,10 @@
-import { registerRootComponent } from 'expo';
+import { Amplify } from 'aws-amplify';
+import amplifyconfig from './src/amplifyconfiguration.json';
 
+// Configure Amplify first, before App is imported
+Amplify.configure(amplifyconfig);
+
+import { registerRootComponent } from 'expo';
 import App from './App';
 
-// registerRootComponent calls AppRegistry.registerComponent('main', () => App);
-// It also ensures that whether you load the app in Expo Go or in a native build,
-// the environment is set up appropriately
 registerRootComponent(App);

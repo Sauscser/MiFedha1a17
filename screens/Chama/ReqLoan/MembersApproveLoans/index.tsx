@@ -1,39 +1,17 @@
 import React, { useEffect, useState } from 'react';
-import {
-  View,
-  Text,
-  TouchableOpacity,
-  ScrollView,
-  StyleSheet,
-  ActivityIndicator,
-  Alert,
-  Modal,
-  Image,
-} from 'react-native';
-
+import { View, Text, TouchableOpacity, ScrollView, StyleSheet, ActivityIndicator, Alert, Modal, Image } from 'react-native';
 import { useRoute } from '@react-navigation/native';
-import { API, graphqlOperation, Storage } from 'aws-amplify';
-import ImageViewer from 'react-native-image-zoom-viewer';
 import RNPrint from 'react-native-print';
+import { listReqLoanChamas, listChamaMembers, listChamaLnApprovals, listChamaMinutes, listMinuteItemsByMinutes, listAttendanceByMinutes } from '../../../../src/graphql/queries';
+import { createChamaLnApproval, updateReqLoanChama } from '../../../../src/graphql/mutations';
+import { generateClient } from 'aws-amplify/api';
+import { getUrl } from 'aws-amplify/storage';
 
-import {
-  listReqLoanChamas,
-  listChamaMembers,
-  listChamaLnApprovals,
-  listChamaMinutes,
-  listMinuteItemsByMinutes,
-  listAttendanceByMinutes,
-} from '../../../../src/graphql/queries';
-
-import {
-  createChamaLnApproval,
-  updateReqLoanChama,
-} from '../../../../src/graphql/mutations';
+const client = generateClient();
 
 const FloatedLoansList = () => {
   const route = useRoute<any>();
   const { memberDetails } = route.params;
-
   const groupContact = memberDetails.groupContact;
   const memberEmail = memberDetails.memberContact;
   const memberName = memberDetails.memberName;
@@ -43,17 +21,17 @@ const FloatedLoansList = () => {
   const [loading, setLoading] = useState(false);
   const [groupSize, setGroupSize] = useState(0);
   const [approvalsMap, setApprovalsMap] = useState<Record<string, any[]>>({});
-
   const [selectedMinutes, setSelectedMinutes] = useState<any | null>(null);
   const [loadingMinutes, setLoadingMinutes] = useState(false);
 
   /* ---------------- FETCH GROUP SIZE ---------------- */
   const fetchGroupSize = async () => {
-    const res: any = await API.graphql(
-      graphqlOperation(listChamaMembers, {
-        filter: { groupContact: { eq: groupContact } },
-      })
-    );
+    const res: any = await client.graphql({
+      query: listChamaMembers,
+      variables: {
+        filter: { groupContact: { eq: groupContact } }
+      }
+    });
     setGroupSize(res.data.listChamaMembers.items.length);
   };
 
@@ -61,14 +39,15 @@ const FloatedLoansList = () => {
   const fetchLoans = async () => {
     setLoading(true);
     try {
-      const res: any = await API.graphql(
-        graphqlOperation(listReqLoanChamas, {
+      const res: any = await client.graphql({
+        query: listReqLoanChamas,
+        variables: {
           filter: {
             chamaPhone: { eq: groupContact },
-            status: { eq: 'AwaitingResponse' },
-          },
-        })
-      );
+            status: { eq: 'AwaitingResponse' }
+          }
+        }
+      });
       setLoans(res.data.listReqLoanChamas.items);
     } catch {
       Alert.alert('Error', 'Failed to fetch loans');
@@ -81,11 +60,10 @@ const FloatedLoansList = () => {
   const fetchApprovals = async (items: any[]) => {
     const map: any = {};
     for (const loan of items) {
-      const res: any = await API.graphql(
-        graphqlOperation(listChamaLnApprovals, {
-          filter: { loanID: { eq: loan.id } },
-        })
-      );
+      const res: any = await client.graphql({
+        query: listChamaLnApprovals,
+        variables: { filter: { loanID: { eq: loan.id } } }
+      });
       map[loan.id] = res.data.listChamaLnApprovals.items;
     }
     setApprovalsMap(map);
@@ -94,8 +72,9 @@ const FloatedLoansList = () => {
   /* ---------------- APPROVE ---------------- */
   const approveLoan = async (loan: any) => {
     try {
-      await API.graphql(
-        graphqlOperation(createChamaLnApproval, {
+      await client.graphql({
+        query: createChamaLnApproval,
+        variables: {
           input: {
             loanID: loan.id,
             memberGrpNumber: groupContact,
@@ -105,20 +84,16 @@ const FloatedLoansList = () => {
             grpName: groupName,
             grpMinutes: "Group Minutes",
             status: 'Approved',
-            description: `Loan approved by ${memberName} (${memberEmail})`,
-          },
-        })
-      );
-
-      await API.graphql(
-        graphqlOperation(updateReqLoanChama, {
-          input: {
-            id: loan.id,
-            membersApprove: loan.membersApprove + 1,
-          },
-        })
-      );
-
+            description: `Loan approved by ${memberName} (${memberEmail})`
+          }
+        }
+      });
+      await client.graphql({
+        query: updateReqLoanChama,
+        variables: {
+          input: { id: loan.id, membersApprove: loan.membersApprove + 1 }
+        }
+      });
       fetchLoans();
     } catch {
       Alert.alert('Error', 'Approval failed');
@@ -133,29 +108,31 @@ const FloatedLoansList = () => {
     }
     setLoadingMinutes(true);
     try {
-      const res: any = await API.graphql(
-        graphqlOperation(listChamaMinutes, { filter: { id: { eq: loan.loanMinutes } } })
-      );
+      const res: any = await client.graphql({
+        query: listChamaMinutes,
+        variables: { filter: { id: { eq: loan.loanMinutes } } }
+      });
       const minutes = res?.data?.listChamaMinutes?.items?.[0];
       if (!minutes) {
         Alert.alert('Minutes not found');
         return;
       }
-
       const [itemsRes, attendanceRes] = await Promise.all([
-        API.graphql(graphqlOperation(listMinuteItemsByMinutes, { minutesId: minutes.id })),
-        API.graphql(graphqlOperation(listAttendanceByMinutes, { minutesId: minutes.id })),
+        client.graphql({ query: listMinuteItemsByMinutes, variables: { minutesId: minutes.id } }),
+        client.graphql({ query: listAttendanceByMinutes, variables: { minutesId: minutes.id } })
       ]);
-
-      const chairSignUrl = minutes.chairpersonId ? await Storage.get(minutes.chairpersonId) : null;
-      const secSignUrl = minutes.secretaryId ? await Storage.get(minutes.secretaryId) : null;
-
+      const chairSignUrl = minutes.chairpersonId
+        ? (await getUrl({ key: minutes.chairpersonId }))?.url || ""
+        : "";
+      const secSignUrl = minutes.secretaryId
+        ? (await getUrl({ key: minutes.secretaryId }))?.url || ""
+        : "";
       setSelectedMinutes({
         ...minutes,
         items: itemsRes?.data?.listMinuteItemsByMinutes?.items || [],
         attendance: attendanceRes?.data?.listAttendanceByMinutes?.items || [],
         chairSignUrl,
-        secSignUrl,
+        secSignUrl
       });
     } catch (err) {
       console.error(err);
@@ -229,7 +206,6 @@ const FloatedLoansList = () => {
     fetchGroupSize();
     fetchLoans();
   }, []);
-
   useEffect(() => {
     if (loans.length) fetchApprovals(loans);
   }, [loans]);
@@ -241,18 +217,13 @@ const FloatedLoansList = () => {
 
       {loading && <ActivityIndicator size="large" color="#e58d29" />}
 
-      {loans.map((loan) => {
+      {loans.map(loan => {
         const approvals = approvalsMap[loan.id] || [];
         const approved = approvals.length;
-        const percent =
-          groupSize > 0 ? Math.round((approved / groupSize) * 100) : 0;
-
-        const alreadyApproved = approvals.some(
-          (a) => a.MemberEmail === memberEmail
-        );
-
-               return (
-          <View key={loan.id} style={styles.card}>
+        const percent = groupSize > 0 ? Math.round(approved / groupSize * 100) : 0;
+        const alreadyApproved = approvals.some(a => a.MemberEmail === memberEmail);
+        return (
+                    <View key={loan.id} style={styles.card}>
             <Text style={styles.amount}>
               KES {Number(loan.amount).toLocaleString()}
             </Text>
@@ -326,8 +297,18 @@ const FloatedLoansList = () => {
       })}
 
       {/* Minutes Modal */}
-      <Modal visible={!!selectedMinutes} transparent onRequestClose={() => setSelectedMinutes(null)}>
-        <View style={{ flex: 1, backgroundColor: "#000000aa", justifyContent: "center" }}>
+      <Modal
+        visible={!!selectedMinutes}
+        transparent
+        onRequestClose={() => setSelectedMinutes(null)}
+      >
+        <View
+          style={{
+            flex: 1,
+            backgroundColor: '#000000aa',
+            justifyContent: 'center',
+          }}
+        >
           {loadingMinutes ? (
             <ActivityIndicator size="large" color="#e58d29" />
           ) : (
@@ -335,13 +316,21 @@ const FloatedLoansList = () => {
               <View style={styles.minutesCard}>
                 <Text style={styles.groupTitle}>{groupName} — Minutes</Text>
                 <Text style={styles.date}>📅 {selectedMinutes?.meetingDate}</Text>
-                <Text style={styles.meta}>Venue: {selectedMinutes?.venue || "-"}</Text>
                 <Text style={styles.meta}>
-                  Attendance: {selectedMinutes?.attendance?.filter((a: any) => a.attendanceStatus === "PRESENT").length}
+                  Venue: {selectedMinutes?.venue || '-'}
+                </Text>
+                <Text style={styles.meta}>
+                  Attendance:{' '}
+                  {selectedMinutes?.attendance?.filter(
+                    (a: any) => a.attendanceStatus === 'PRESENT'
+                  ).length}
                 </Text>
 
                 {/* Export to PDF */}
-                <TouchableOpacity style={styles.exportBtn} onPress={() => exportMinutesToPDF(selectedMinutes)}>
+                <TouchableOpacity
+                  style={styles.exportBtn}
+                  onPress={() => exportMinutesToPDF(selectedMinutes)}
+                >
                   <Text style={styles.exportText}>Export to PDF</Text>
                 </TouchableOpacity>
 
@@ -350,16 +339,24 @@ const FloatedLoansList = () => {
                   ?.sort((a: any, b: any) => a.entryOrder - b.entryOrder)
                   .map((item: any) => (
                     <View key={item.id} style={styles.minuteItem}>
-                      <Text style={styles.minuteTitle}>{item.entryOrder}. {item.minuteRef}</Text>
+                      <Text style={styles.minuteTitle}>
+                        {item.entryOrder}. {item.minuteRef}
+                      </Text>
                       <Text>{item.content}</Text>
-                      {item.decision && <Text style={styles.decision}>Decision: {item.decision}</Text>}
+                      {item.decision && (
+                        <Text style={styles.decision}>
+                          Decision: {item.decision}
+                        </Text>
+                      )}
                     </View>
                   ))}
 
                 <Text style={styles.section}>Attendance List</Text>
                 {selectedMinutes?.attendance?.map((a: any, idx: number) => (
                   <View key={idx} style={styles.memberRow}>
-                    <Text>{a.memberName} — {a.attendanceStatus}</Text>
+                    <Text>
+                      {a.memberName} — {a.attendanceStatus}
+                    </Text>
                   </View>
                 ))}
 
@@ -367,23 +364,36 @@ const FloatedLoansList = () => {
                 <View style={styles.signatures}>
                   <View style={styles.signatureBlock}>
                     <Text style={styles.signatureLabel}>Chairperson</Text>
-                    {selectedMinutes?.chairSignUrl ? (
-                      <Image source={{ uri: selectedMinutes.chairSignUrl }} style={styles.signature} />
+                    {selectedMinutes?.chairSignUrl &&
+                    typeof selectedMinutes.chairSignUrl === 'string' &&
+                    selectedMinutes.chairSignUrl.trim() !== '' ? (
+                      <Image
+                        source={{ uri: selectedMinutes.chairSignUrl }}
+                        style={styles.signature}
+                      />
                     ) : (
                       <Text style={styles.signatureMissing}>Not signed</Text>
                     )}
                   </View>
                   <View style={styles.signatureBlock}>
                     <Text style={styles.signatureLabel}>Secretary</Text>
-                    {selectedMinutes?.secSignUrl ? (
-                      <Image source={{ uri: selectedMinutes.secSignUrl }} style={styles.signature} />
+                    {selectedMinutes?.secSignUrl &&
+                    typeof selectedMinutes.secSignUrl === 'string' &&
+                    selectedMinutes.secSignUrl.trim() !== '' ? (
+                      <Image
+                        source={{ uri: selectedMinutes.secSignUrl }}
+                        style={styles.signature}
+                      />
                     ) : (
                       <Text style={styles.signatureMissing}>Not signed</Text>
                     )}
                   </View>
                 </View>
 
-                <TouchableOpacity style={[styles.closeBtn, { backgroundColor: 'skyblue' }]} onPress={() => setSelectedMinutes(null)}>
+                <TouchableOpacity
+                  style={[styles.closeBtn, { backgroundColor: 'skyblue' }]}
+                  onPress={() => setSelectedMinutes(null)}
+                >
                   <Text style={{ color: '#fff' }}>Close</Text>
                 </TouchableOpacity>
               </View>
@@ -399,9 +409,14 @@ export default FloatedLoansList;
 
 
 const styles = StyleSheet.create({
-  container: { padding: 16 },
-  header: { fontSize: 24, fontWeight: '800', marginBottom: 20 },
-
+  container: {
+    padding: 16,
+  },
+  header: {
+    fontSize: 24,
+    fontWeight: '800',
+    marginBottom: 20,
+  },
   // Loan card
   card: {
     backgroundColor: '#fff',
@@ -410,13 +425,39 @@ const styles = StyleSheet.create({
     marginBottom: 20,
     elevation: 4,
   },
-  amount: { fontSize: 20, fontWeight: '800', color: '#1e40af' },
-  purpose: { marginVertical: 6, color: '#374151' },
-  row: { flexDirection: 'row', justifyContent: 'space-between', marginVertical: 2 },
-  detail: { color: '#6b7280', fontSize: 14 },
-  value: { fontWeight: '600', fontSize: 14, color: '#111827' },
-  advocate: { marginTop: 6, fontStyle: 'italic', color: '#4b5563' },
-  approvalText: { marginTop: 10, fontSize: 13, color: '#374151' },
+  amount: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#1e40af',
+  },
+  purpose: {
+    marginVertical: 6,
+    color: '#374151',
+  },
+  row: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginVertical: 2,
+  },
+  detail: {
+    color: '#6b7280',
+    fontSize: 14,
+  },
+  value: {
+    fontWeight: '600',
+    fontSize: 14,
+    color: '#111827',
+  },
+  advocate: {
+    marginTop: 6,
+    fontStyle: 'italic',
+    color: '#4b5563',
+  },
+  approvalText: {
+    marginTop: 10,
+    fontSize: 13,
+    color: '#374151',
+  },
   progressBg: {
     height: 8,
     backgroundColor: '#e5e7eb',
@@ -434,7 +475,11 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     marginTop: 12,
   },
-  approveText: { color: '#fff', textAlign: 'center', fontWeight: '700' },
+  approveText: {
+    color: '#fff',
+    textAlign: 'center',
+    fontWeight: '700',
+  },
   secondaryBtn: {
     marginTop: 8,
     padding: 8,
@@ -442,7 +487,6 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     alignItems: 'center',
   },
-
   // Minutes modal
   minutesModal: {
     margin: 20,
@@ -466,9 +510,25 @@ const styles = StyleSheet.create({
     color: '#1f2937',
     textAlign: 'center',
   },
-  date: { fontSize: 14, color: '#374151', marginBottom: 4, textAlign: 'center' },
-  meta: { fontSize: 13, color: '#6b7280', marginBottom: 4, textAlign: 'center' },
-  section: { fontSize: 16, fontWeight: '700', marginTop: 16, marginBottom: 8, color: '#111827' },
+  date: {
+    fontSize: 14,
+    color: '#374151',
+    marginBottom: 4,
+    textAlign: 'center',
+  },
+  meta: {
+    fontSize: 13,
+    color: '#6b7280',
+    marginBottom: 4,
+    textAlign: 'center',
+  },
+  section: {
+    fontSize: 16,
+    fontWeight: '700',
+    marginTop: 16,
+    marginBottom: 8,
+    color: '#111827',
+  },
   minuteItem: {
     backgroundColor: '#f9fafb',
     padding: 12,
@@ -477,19 +537,44 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#e5e7eb',
   },
-  minuteTitle: { fontWeight: '700', marginBottom: 4, color: '#1f2937' },
-  decision: { marginTop: 6, fontStyle: 'italic', color: '#065f46' },
+  minuteTitle: {
+    fontWeight: '700',
+    marginBottom: 4,
+    color: '#1f2937',
+  },
+  decision: {
+    marginTop: 6,
+    fontStyle: 'italic',
+    color: '#065f46',
+  },
   memberRow: {
     padding: 8,
     borderBottomWidth: 1,
     borderBottomColor: '#e5e7eb',
   },
-
   // Signatures
-  signatures: { flexDirection: 'row', justifyContent: 'space-around', marginTop: 12, marginBottom: 12 },
-  signatureBlock: { alignItems: 'center', width: 140 },
-  signatureLabel: { fontSize: 13, fontWeight: '700', marginBottom: 6, color: '#374151' },
-  signatureMissing: { fontSize: 12, fontStyle: 'italic', color: '#9ca3af', marginTop: 8 },
+  signatures: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    marginTop: 12,
+    marginBottom: 12,
+  },
+  signatureBlock: {
+    alignItems: 'center',
+    width: 140,
+  },
+  signatureLabel: {
+    fontSize: 13,
+    fontWeight: '700',
+    marginBottom: 6,
+    color: '#374151',
+  },
+  signatureMissing: {
+    fontSize: 12,
+    fontStyle: 'italic',
+    color: '#9ca3af',
+    marginTop: 8,
+  },
   signature: {
     width: 120,
     height: 60,
@@ -499,7 +584,6 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     backgroundColor: '#ffffff',
   },
-
   // Modal buttons
   exportBtn: {
     marginTop: 12,

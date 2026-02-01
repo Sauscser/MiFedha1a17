@@ -1,0 +1,79 @@
+{
+  "version": "1",
+  "cognitoConfig": {
+    "identityPoolName": "mifedha1a2418a4fd_identitypool_2418a4fd",
+    "allowUnauthenticatedIdentities": true,
+    "resourceNameTruncated": "mifedh2418a4fd",
+    "userPoolName": "mifedha1a2418a4fd_userpool_2418a4fd",
+    "autoVerifiedAttributes": [
+      "email"
+    ],
+    "mfaConfiguration": "OFF",
+    "mfaTypes": [
+      "SMS Text Message"
+    ],
+    "smsAuthenticationMessage": "Your authentication code is {####}",
+    "smsVerificationMessage": "Your verification code is {####}",
+    "emailVerificationSubject": "Your verification code",
+    "emailVerificationMessage": "Your verification code is {####}",
+    "defaultPasswordPolicy": false,
+    "passwordPolicyMinLength": 8,
+    "passwordPolicyCharacters": [],
+    "requiredAttributes": [
+      "email"
+    ],
+    "aliasAttributes": [],
+    "userpoolClientGenerateSecret": false,
+    "userpoolClientRefreshTokenValidity": 30,
+    "userpoolClientWriteAttributes": [
+      "email"
+    ],
+    "userpoolClientReadAttributes": [
+      "email"
+    ],
+    "userpoolClientLambdaRole": "mifedh2418a4fd_userpoolclient_lambda_role",
+    "userpoolClientSetAttributes": false,
+    "sharedId": "2418a4fd",
+    "resourceName": "mifedha1a2418a4fd",
+    "authSelections": "identityPoolAndUserPool",
+    "useDefault": "default",
+    "triggers": {},
+    "userPoolGroupList": [
+      "Executive",
+      "AdminOne",
+      "AdminOneTwo",
+      "RegionalAdmin",
+      "CountyAdmin",
+      "CountyAdminTwo",
+      "BranchAdmin",
+      "BranchAdminTwo",
+      "Advocate",
+      "KFKubwa",
+      "KFNdogo",
+      "SpareGrp",
+      "BizOwner",
+      "MFChamp"
+    ],
+    "serviceName": "Cognito",
+    "usernameCaseSensitive": false,
+    "useEnabledMfas": true,
+    "authRoleArn": {
+      "Fn::GetAtt": [
+        "AuthRole",
+        "Arn"
+      ]
+    },
+    "unauthRoleArn": {
+      "Fn::GetAtt": [
+        "UnauthRole",
+        "Arn"
+      ]
+    },
+    "breakCircularDependency": true,
+    "dependsOn": [],
+    "parentStack": {
+      "Ref": "AWS::StackId"
+    },
+    "permissions": []
+  }
+}

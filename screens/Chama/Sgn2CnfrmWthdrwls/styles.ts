@@ -1,5 +1,4 @@
-import {StyleSheet, Dimensions} from 'react-native';
-
+import { StyleSheet, Dimensions } from 'react-native';
 const styles = StyleSheet.create({
   image: {
     width: '100%',
@@ -9,14 +8,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     flexDirection: 'column',
     marginTop: 1,
-    flexWrap:"wrap"
+    flexWrap: "wrap"
   },
   title: {
     fontSize: 16,
     fontWeight: 'bold',
-    color: 'black',
+    color: 'black'
   },
-
   amountTitleView: {
     backgroundColor: 'white',
     marginHorizontal: 40,
@@ -26,9 +24,8 @@ const styles = StyleSheet.create({
     marginTop: "2%",
     justifyContent: 'center',
     alignItems: 'center',
-    flexDirection: 'column',
+    flexDirection: 'column'
   },
-
   sendAmtView: {
     backgroundColor: '#72ebd8',
     marginHorizontal: 10,
@@ -38,9 +35,8 @@ const styles = StyleSheet.create({
     marginTop: "6%",
     justifyContent: 'center',
     alignItems: 'center',
-    flexDirection: 'column',
+    flexDirection: 'column'
   },
-
   sendAmtText: {
     fontSize: 16,
     fontWeight: 'bold',
@@ -60,20 +56,19 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     flexDirection: 'column',
-    marginBottom: "95%",
+    marginBottom: "95%"
   },
   sendAmtButtonText: {
     fontSize: 16,
     fontWeight: 'bold',
-    color: 'black',
+    color: 'black'
   },
-
   sendAmtInput: {
     backgroundColor: 'white',
-    width:"95%",
+    width: "95%",
     height: "50%",
     borderRadius: 5,
-    marginTop: "2%",
-  },
+    marginTop: "2%"
+  }
 });
 export default styles;

@@ -1,8 +1,12 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, FlatList, Alert, TextInput, StyleSheet } from 'react-native';
-import { API, graphqlOperation, Auth, SortDirection } from 'aws-amplify';
+import React, { useState } from 'react';
+import { View, Text, FlatList, Alert, TextInput, StyleSheet, ActivityIndicator } from 'react-native';
 import NonLnSent from '../../../../../components/MyAc/ViewSentNonLns';
-import { listNonLoans, listPersonels, VwMySntMny } from '../../../../../src/graphql/queries';
+import { listPersonels, VwMySntMny } from '../../../../../src/graphql/queries';
+
+import { getCurrentUser, fetchUserAttributes } from 'aws-amplify/auth';
+import { generateClient } from 'aws-amplify/api';
+
+const client = generateClient();
 
 const FetchSMNonLnsSnt = () => {
   const [loading, setLoading] = useState(false);
@@ -15,35 +19,33 @@ const FetchSMNonLnsSnt = () => {
 
     setLoading(true);
     try {
-      const user = await Auth.currentAuthenticatedUser();
+      const userInfo = await getCurrentUser();
+      const attributes = await fetchUserAttributes();
 
-      const personnelRes: any = await API.graphql(
-        graphqlOperation(listPersonels, {
+      const personnelRes: any = await client.graphql({
+        query: listPersonels,
+        variables: {
           filter: {
-            phoneKontact: { eq: user.attributes.email },
+            phoneKontact: { eq: attributes.email },
             BusinessRegNo: { eq: bizPhone },
           },
-        })
-      );
+        },
+      });
 
       if (!personnelRes?.data?.listPersonels?.items?.length) {
         Alert.alert('Access Denied', "Retry if you're sure you work here.");
         return;
       }
 
-      const recordsRes: any = await API.graphql(
-        graphqlOperation(VwMySntMny, {
-
-          senderPhn: bizPhone ,
-          sortDirection:"DESC",
+      const recordsRes: any = await client.graphql({
+        query: VwMySntMny,
+        variables: {
+          senderPhn: bizPhone,
+          sortDirection: "DESC",
           limit: 100,
-          filter: {
-            status: { eq: "cashSales" },
-            
-          },
-          
-        })
-      );
+          filter: { status: { eq: "cashSales" } },
+        },
+      });
 
       const items = recordsRes?.data?.VwMySntMny?.items || [];
 
@@ -53,7 +55,8 @@ const FetchSMNonLnsSnt = () => {
 
       setRecords(items);
     } catch (e) {
-      console.log('Error fetching records:', e);
+      console.error('Error fetching records:', e);
+      Alert.alert("Error", "Could not fetch records. Please retry or check your connection.");
     } finally {
       setLoading(false);
     }
@@ -61,13 +64,9 @@ const FetchSMNonLnsSnt = () => {
 
   const filteredRecords = records.filter(item => {
     const q = searchQuery.toLowerCase();
-    return (
-      item.RecName?.toLowerCase().includes(q) 
-      
-    );
+    return item.RecName?.toLowerCase().includes(q);
   });
 
-  
   return (
     <View style={styles.container}>
       <View style={styles.inputBlock}>
@@ -99,6 +98,7 @@ const FetchSMNonLnsSnt = () => {
           </>
         )}
       />
+      {loading && <ActivityIndicator size="large" color="blue" />}
     </View>
   );
 };

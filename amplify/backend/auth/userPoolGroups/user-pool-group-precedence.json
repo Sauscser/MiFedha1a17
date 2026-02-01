@@ -1,0 +1,58 @@
+[
+  {
+    "groupName": "Executive",
+    "precedence": 1
+  },
+  {
+    "groupName": "AdminOne",
+    "precedence": 2
+  },
+  {
+    "groupName": "AdminOneTwo",
+    "precedence": 3
+  },
+  {
+    "groupName": "RegionalAdmin",
+    "precedence": 4
+  },
+  {
+    "groupName": "CountyAdmin",
+    "precedence": 5
+  },
+  {
+    "groupName": "CountyAdminTwo",
+    "precedence": 6
+  },
+  {
+    "groupName": "BranchAdmin",
+    "precedence": 7
+  },
+  {
+    "groupName": "BranchAdminTwo",
+    "precedence": 8
+  },
+  {
+    "groupName": "Advocate",
+    "precedence": 9
+  },
+  {
+    "groupName": "KFKubwa",
+    "precedence": 10
+  },
+  {
+    "groupName": "KFNdogo",
+    "precedence": 11
+  },
+  {
+    "groupName": "SpareGrp",
+    "precedence": 12
+  },
+  {
+    "groupName": "BizOwner",
+    "precedence": 13
+  },
+  {
+    "groupName": "MFChamp",
+    "precedence": 14
+  }
+]
