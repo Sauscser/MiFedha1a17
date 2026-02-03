@@ -3,6 +3,8 @@ import { View, TextInput, FlatList, TouchableOpacity, Text, ActivityIndicator, S
 type Prediction = {
   place_id: string;
   description: string;
+  lat: number;
+  lon: number;
 };
 export type PlaceDetails = {
   placeId: string;
@@ -14,7 +16,6 @@ export type PlaceDetails = {
   };
 };
 type Props = {
-  apiKey: string;
   placeholder?: string;
   onPlaceSelected?: (place: PlaceDetails) => void;
   minLength?: number;
@@ -25,9 +26,10 @@ type Props = {
   itemStyle?: any;
   itemTextStyle?: any;
   clearOnSelect?: boolean;
+  value?: string;
+  onValueChange?: (val: string) => void;
 };
 export default function GooglePlacesAutocompleteNew({
-  apiKey,
   placeholder = 'Search location',
   onPlaceSelected,
   minLength = 2,
@@ -37,9 +39,12 @@ export default function GooglePlacesAutocompleteNew({
   listStyle,
   itemStyle,
   itemTextStyle,
-  clearOnSelect = false
+  clearOnSelect = false,
+  value,
+  onValueChange
 }: Props) {
-  const [query, setQuery] = useState('');
+  const [internalQuery, setInternalQuery] = useState('');
+  const query = value !== undefined ? value : internalQuery;
   const [predictions, setPredictions] = useState<Prediction[]>([]);
   const [loading, setLoading] = useState(false);
 
@@ -52,75 +57,63 @@ export default function GooglePlacesAutocompleteNew({
         fetchPredictions(text);
       }, debounceMs);
     };
-  }, [debounceMs, apiKey]);
+  }, [debounceMs]);
   async function fetchPredictions(text: string) {
-    if (!apiKey) return;
     if (text.trim().length < minLength) {
       setPredictions([]);
       return;
     }
     try {
       setLoading(true);
-      const url = `https://places.googleapis.com/v1/places:autocomplete` + `?input=${encodeURIComponent(text)}` + `&regionCode=KE` +
-      // restrict to Kenya
-      `&languageCode=en` + `&key=${apiKey}`;
+      // Use Photon API for OSM autocomplete
+      const url = `https://photon.komoot.io/api/?q=${encodeURIComponent(text)}&limit=5`;
       const res = await fetch(url);
       const data = await res.json();
-      console.log("Autocomplete response:", data);
-      if (!data?.suggestions) {
-        console.warn("No suggestions:", data);
+      if (!data?.features) {
         setPredictions([]);
         setLoading(false);
         return;
       }
-      const preds = data.suggestions.map((s: any) => ({
-        place_id: s.placePrediction.placeId,
-        description: s.placePrediction.text.text
+      const preds = data.features.map((f: any) => ({
+        place_id: f.properties.osm_id ? String(f.properties.osm_id) : f.properties.osm_id || f.properties.name,
+        description: f.properties.name + (f.properties.city ? ", " + f.properties.city : "") + (f.properties.country ? ", " + f.properties.country : ""),
+        lat: f.geometry.coordinates[1],
+        lon: f.geometry.coordinates[0]
       })) as Prediction[];
       setPredictions(preds);
     } catch (err) {
-      console.warn('Autocomplete error:', err);
       setPredictions([]);
     } finally {
       setLoading(false);
     }
   }
-  async function fetchPlaceDetails(placeId: string, description?: string) {
-    try {
-      const url = `https://places.googleapis.com/v1/places/${encodeURIComponent(placeId)}` + `?fields=location,displayName` + `&key=${apiKey}`;
-      const res = await fetch(url);
-      const data = await res.json();
-      console.log("Place details response:", data);
-      if (!data?.location) {
-        console.warn('No location in details:', data);
-        return;
+  function fetchPlaceDetails(item: Prediction) {
+    const place: PlaceDetails = {
+      placeId: item.place_id,
+      description: item.description,
+      displayName: item.description,
+      location: {
+        latitude: item.lat,
+        longitude: item.lon
       }
-      const place: PlaceDetails = {
-        placeId,
-        description,
-        displayName: data?.displayName?.text,
-        location: {
-          latitude: Number(data.location.latitude),
-          longitude: Number(data.location.longitude)
-        }
-      };
-      onPlaceSelected?.(place);
-      if (clearOnSelect) {
-        setQuery('');
-        setPredictions([]);
-      } else {
-        setQuery(place.displayName || description || query);
-        setPredictions([]);
-      }
-    } catch (err) {
-      console.warn('Details error:', err);
+    };
+    onPlaceSelected?.(place);
+    if (clearOnSelect) {
+      if (onValueChange) onValueChange('');
+      else setInternalQuery('');
+      setPredictions([]);
+    } else {
+      if (onValueChange) onValueChange(place.displayName || '');
+      else setInternalQuery(place.displayName || '');
+      setPredictions([]);
     }
   }
   return <View style={[styles.container, containerStyle]}>
       <TextInput value={query} placeholder={placeholder} onChangeText={text => {
-      setQuery(text);
-      debouncedFetch(text);
-    }} style={[styles.input, inputStyle]} />
+        if (onValueChange) onValueChange(text);
+        else setInternalQuery(text);
+        debouncedFetch(text);
+      }} style={[styles.input, inputStyle]} />
 
       {loading ? <View style={styles.loadingRow}>
           <ActivityIndicator size="small" />
@@ -129,7 +122,7 @@ export default function GooglePlacesAutocompleteNew({
 
       {predictions.length > 0 && <FlatList keyboardShouldPersistTaps="handled" data={predictions} keyExtractor={item => item.place_id} style={[styles.list, listStyle]} renderItem={({
       item
-    }) => <TouchableOpacity style={[styles.item, itemStyle]} onPress={() => fetchPlaceDetails(item.place_id, item.description)}>
+    }) => <TouchableOpacity style={[styles.item, itemStyle]} onPress={() => fetchPlaceDetails(item)}>
               <Text style={[styles.itemTxt, itemTextStyle]}>{item.description}</Text>
             </TouchableOpacity>} />}
     </View>;

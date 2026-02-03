@@ -1,94 +1,202 @@
-import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Alert, Dimensions } from 'react-native';
-import MapView, { Marker, Polyline } from 'react-native-maps';
+import React, { useEffect, useState, useRef } from 'react';
+import { View, Text, StyleSheet, FlatList, Dimensions, ActivityIndicator } from 'react-native';
+import MapView, { Marker, Polyline, UrlTile } from 'react-native-maps';
+import { listRideRequests, getTransportRegister } from '../../../src/graphql/queries';
 import { onUpdateRideRequest } from '../../../src/graphql/subscriptions';
-import { getRideRequest } from '../../../src/graphql/queries';
-import { updateRideRequest } from '../../../src/graphql/mutations';
-import * as Location from 'expo-location';
-import PolylineDecoder from '@mapbox/polyline';
-import { PaymentMethod } from '../../../types';
 import { Observable } from 'zen-observable-ts';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { getCurrentUser, fetchUserAttributes } from "aws-amplify/auth";
 import { generateClient } from "aws-amplify/api";
+
 const client = generateClient();
 const SCREEN_WIDTH = Dimensions.get('window').width;
 const SCREEN_HEIGHT = Dimensions.get('window').height;
-const GOOGLE_MAPS_API_KEY = 'AIzaSyA0rFIOCDBr3WI-I4SGHGPFLUW7bWSAnvA';
-interface RideTrackingScreenProps {
-  route: {
-    params: {
-      rideId: string;
-    };
-  };
-  navigation: any;
-}
-export default function RideTrackingScreen({
-  route,
-  navigation
-}: RideTrackingScreenProps) {
-  const {
-    rideId
-  } = route.params;
-  const [ride, setRide] = useState<any>(null);
-  const [userLocation, setUserLocation] = useState<{
-    latitude: number;
-    longitude: number;
-  } | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [countdown, setCountdown] = useState(60);
-  const [routeCoords, setRouteCoords] = useState<Array<{
-    latitude: number;
-    longitude: number;
-  }>>([]);
-  const [shouldGoBack, setShouldGoBack] = useState(false);
-  const mapRef = useRef<MapView | null>(null);
-  const countdownRef = useRef<NodeJS.Timeout | null>(null);
-  const routeIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
-  // ---------- Get passenger location ----------
+const getDistanceKm = (lat1: number, lon1: number, lat2: number, lon2: number) => {
+  const toRad = (x: number) => x * Math.PI / 180;
+  const R = 6371;
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+};
+
+import { updateRideRequest } from '../../../src/graphql/mutations';
+
+export default function RideTrackingScreen({ navigation }: any) {
+  const [rides, setRides] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [selectedIdx, setSelectedIdx] = useState(0);
+  const mapRef = useRef<MapView | null>(null);
+
+  const [userEmail, setUserEmail] = useState<string | null>(null);
+
+  useEffect(() => {
+    let sub: any = null;
+    (async () => {
+      try {
+        const user = await getCurrentUser();
+        const attributes = await fetchUserAttributes();
+        if (attributes.email) setUserEmail(attributes.email);
+        const res: any = await client.graphql({
+          query: listRideRequests,
+          variables: {
+            filter: {
+              passengerEmail: { eq: attributes.email }
+            },
+            limit: 20,
+            sortDirection: 'DESC',
+          }
+        });
+        const items = res?.data?.listRideRequests?.items || [];
+        items.sort((a: any, b: any) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+        setRides(items);
+
+        // Subscribe to ride updates for live metrics
+        sub = (client.graphql({ query: onUpdateRideRequest }) as unknown as Observable<any>).subscribe({
+          next: ({ value }: any) => {
+            const updated = value?.data?.onUpdateRideRequest;
+            if (!updated) return;
+            if (updated.passengerEmail === attributes.email) {
+              setRides(prev => {
+                const exists = prev.some(r => r.id === updated.id);
+                if (exists) return prev.map(r => r.id === updated.id ? updated : r);
+                // if new ride, append
+                return [...prev, updated].sort((a: any, b: any) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+              });
+            }
+          },
+          error: (err: any) => console.warn('ride updates subscription error', err)
+        });
+      } catch (err) {
+        setRides([]);
+      } finally {
+        setLoading(false);
+      }
+    })();
+    return () => sub?.unsubscribe?.();
+  }, []);
+
+  // Focus map on selected ride
+  useEffect(() => {
+    if (!rides.length || !mapRef.current) return;
+    const ride = rides[selectedIdx];
+    if (ride && (ride.pickupLatitude && ride.pickupLongitude)) {
+      mapRef.current.animateToRegion({
+        latitude: ride.pickupLatitude,
+        longitude: ride.pickupLongitude,
+        latitudeDelta: 0.1,
+        longitudeDelta: 0.1
+      }, 500);
+    }
+  }, [selectedIdx, rides]);
+
+  // Route state for polylines
+  const [routeToPickup, setRouteToPickup] = useState<Array<{latitude:number,longitude:number}>>([]);
+  const [routeToDrop, setRouteToDrop] = useState<Array<{latitude:number,longitude:number}>>([]);
+  const [routeDistanceKm, setRouteDistanceKm] = useState<number | null>(null);
+  // Cache transport register lookups by id
+  const transportMap = useRef<Record<string, any>>({});
+  const [transporterTick, setTransporterTick] = useState(0);
+  // Route cache load/save
+  const routeCache = useRef<Record<string, any>>({});
   useEffect(() => {
     (async () => {
       try {
-        const {
-          status
-        } = await Location.requestForegroundPermissionsAsync();
-        if (status !== 'granted') return;
-        const loc = await Location.getCurrentPositionAsync({
-          accuracy: Location.Accuracy.Balanced
-        });
-        setUserLocation({
-          latitude: loc.coords.latitude,
-          longitude: loc.coords.longitude
-        });
-      } catch (err) {
-        console.warn('Location error', err);
+        const raw = await AsyncStorage.getItem('routeCache');
+        if (raw) routeCache.current = JSON.parse(raw);
+      } catch (e) {
+        console.warn('Failed to load route cache', e);
       }
     })();
   }, []);
 
-  // ---------- Fetch ride ----------
-  const fetchRide = useCallback(async () => {
+  // Fetch route and distance using OSRM
+  const fetchRouteWithDistance = async (start: { latitude:number, longitude:number }, end: { latitude:number, longitude:number }) => {
     try {
-      const res: any = await client.graphql({
-        query: getRideRequest,
-        variables: {
-          id: rideId
-        }
-      });
-      setRide(res.data.getRideRequest);
-      setLoading(false);
+      const url = `https://router.project-osrm.org/route/v1/driving/${start.longitude},${start.latitude};${end.longitude},${end.latitude}?overview=full&geometries=geojson`;
+      const res = await fetch(url);
+      const data = await res.json();
+      if (data && data.routes && data.routes.length) {
+        const coords = data.routes[0].geometry.coordinates.map(([lng, lat]: [number, number]) => ({ latitude: lat, longitude: lng }));
+        return { coords, distanceKm: data.routes[0].distance / 1000 };
+      }
     } catch (err) {
-      console.error('Error fetching ride', err);
-      Alert.alert('Error', 'Failed to fetch ride details.');
-      setLoading(false);
+      console.warn('OSRM Directions API error:', err);
     }
-  }, [rideId]);
-  useEffect(() => {
-    fetchRide();
-  }, [fetchRide]);
+    return { coords: [], distanceKm: 0 };
+  };
 
-  // ---------- Update ride status ----------
-  const updateRideStatus = async (status: string) => {
-    if (!ride) return;
+  // Fetch routes for the selected ride and transporter info
+  useEffect(() => {
+    (async () => {
+      const ride = rides[selectedIdx];
+      if (!ride) return;
+      setRouteToPickup([]);
+      setRouteToDrop([]);
+      setRouteDistanceKm(null);
+      try {
+        // rider -> pickup (use cached if present)
+        if (ride.riderLatitude && ride.riderLongitude && ride.pickupLatitude && ride.pickupLongitude) {
+          const cache = routeCache.current[ride.id]?.pickup;
+          if (cache && cache.length > 0) {
+            setRouteToPickup(cache);
+          } else {
+            const res = await fetchRouteWithDistance({ latitude: ride.riderLatitude, longitude: ride.riderLongitude }, { latitude: ride.pickupLatitude, longitude: ride.pickupLongitude });
+            setRouteToPickup(res.coords);
+            routeCache.current[ride.id] = { ...(routeCache.current[ride.id] || {}), pickup: res.coords };
+            await AsyncStorage.setItem('routeCache', JSON.stringify(routeCache.current)).catch(() => {});
+          }
+        }
+        // pickup -> destination OR rider -> destination when Active (use cache if present)
+        if (ride.pickupLatitude && ride.pickupLongitude && ride.destinationLatitude && ride.destinationLongitude) {
+          const cache2 = routeCache.current[ride.id]?.drop;
+          if (cache2 && cache2.length > 0) {
+            setRouteToDrop(cache2);
+            setRouteDistanceKm(routeCache.current[ride.id]?.dropDistanceKm ?? null);
+          } else {
+            const useStart = (ride.rideStatus === 'Active' && ride.riderLatitude && ride.riderLongitude) ? { latitude: ride.riderLatitude, longitude: ride.riderLongitude } : { latitude: ride.pickupLatitude, longitude: ride.pickupLongitude };
+            const res2 = await fetchRouteWithDistance(useStart, { latitude: ride.destinationLatitude, longitude: ride.destinationLongitude });
+            setRouteToDrop(res2.coords);
+            setRouteDistanceKm(res2.distanceKm);
+            routeCache.current[ride.id] = { ...(routeCache.current[ride.id] || {}), drop: res2.coords, dropDistanceKm: res2.distanceKm };
+            await AsyncStorage.setItem('routeCache', JSON.stringify(routeCache.current)).catch(() => {});
+          }
+        }
+
+        // Fetch transporter number plate (if any) using selectedRiderID
+        if (ride.selectedRiderID && !transportMap.current[ride.selectedRiderID]) {
+          try {
+            const tRes: any = await client.graphql({ query: getTransportRegister, variables: { id: ride.selectedRiderID } });
+            const transporter = tRes?.data?.getTransportRegister;
+            if (transporter) {
+              transportMap.current[ride.selectedRiderID] = transporter;
+              setTransporterTick(t => t + 1);
+            }
+          } catch (err) {
+            console.warn('Failed to fetch transporter info', err);
+          }
+        }
+      } catch (err) {
+        console.warn('Route fetch failed', err);
+      }
+    })();
+  }, [selectedIdx, rides]);
+
+  // Fit map to polylines when routes change
+  useEffect(() => {
+    if (!mapRef.current) return;
+    const coords = [...routeToPickup, ...routeToDrop];
+    if (coords.length > 1) {
+      try {
+        (mapRef.current as any).fitToCoordinates(coords, { edgePadding: { top: 80, right: 80, bottom: 180, left: 80 }, animated: true });
+      } catch (e) {}
+    }
+  }, [routeToPickup, routeToDrop]);
+
+  // Action handlers
+  const updateRideStatus = async (ride: any, status: string) => {
     try {
       await client.graphql({
         query: updateRideRequest,
@@ -99,266 +207,155 @@ export default function RideTrackingScreen({
           }
         }
       });
-    } catch (err) {
-      console.error(err);
-      Alert.alert('Error', 'Failed to update ride status.');
-    }
-  };
-
-  // ---------- Passenger actions ----------
-  const cancelRide = () => updateRideStatus('Cancelled');
-  const completeRide = () => updateRideStatus('Completed');
-  const initiateTrip = () => updateRideStatus('Active');
-
-  // ---------- Fetch route ----------
-  const fetchRoute = async (start: {
-    lat: number;
-    lng: number;
-  }, end: {
-    lat: number;
-    lng: number;
-  }) => {
-    try {
-      const res = await fetch(`https://maps.googleapis.com/maps/api/directions/json?origin=${start.lat},${start.lng}&destination=${end.lat},${end.lng}&key=${GOOGLE_MAPS_API_KEY}`);
-      const data = await res.json();
-      if (data.routes.length) {
-        const points = PolylineDecoder.decode(data.routes[0].overview_polyline.points);
-        return points.map((p: any) => ({
-          latitude: p[0],
-          longitude: p[1]
-        }));
-      }
-    } catch (err) {
-      console.error('Directions API error:', err);
-    }
-    return [];
-  };
-
-  // ---------- Update polyline based on status ----------
-  const updateRoutePolyline = useCallback(async () => {
-    if (!ride) return;
-    let start, end;
-    if (ride.rideStatus === 'TransportApproved') {
-      start = {
-        lat: ride.riderLatitude,
-        lng: ride.riderLongitude
-      };
-      end = {
-        lat: ride.pickupLatitude,
-        lng: ride.pickupLongitude
-      };
-    } else if (ride.rideStatus === 'Active') {
-      start = {
-        lat: ride.pickupLatitude,
-        lng: ride.pickupLongitude
-      };
-      end = {
-        lat: ride.destinationLatitude,
-        lng: ride.destinationLongitude
-      };
-    } else {
-      setRouteCoords([]);
-      return;
-    }
-    const coords = await fetchRoute(start, end);
-    setRouteCoords(coords);
-  }, [ride]);
-
-  // ---------- Ride subscription & periodic updates ----------
-  useEffect(() => {
-    if (!rideId) return;
-    let pollInterval: NodeJS.Timeout | null = null;
-
-    // Cast as Observable for TypeScript
-    const sub = (client.graphql({
-      query: onUpdateRideRequest,
-      variables: {
-        id: rideId
-      }
-    }) as Observable<any>).subscribe({
-      next: ({
-        value
-      }) => {
-        const updatedRide = value?.data?.onUpdateRideRequest;
-        if (updatedRide) {
-          setRide(updatedRide);
-
-          // When rider approves or passenger starts, start periodic route updates
-          if (updatedRide.rideStatus === 'TransportApproved' || updatedRide.rideStatus === 'Active') {
-            setLoading(false);
-            if (routeIntervalRef.current) clearInterval(routeIntervalRef.current);
-            updateRoutePolyline();
-            routeIntervalRef.current = setInterval(updateRoutePolyline, 10000);
-          }
-
-          // Stop countdown if ride approved or declined
-          if (updatedRide.rideStatus === 'TransportApproved' || updatedRide.rideStatus === 'transportRequestNo') {
-            if (countdownRef.current) clearInterval(countdownRef.current);
-          }
+      // Refresh rides after update
+      const res: any = await client.graphql({
+        query: listRideRequests,
+        variables: {
+          filter: {
+            passengerEmail: { eq: ride.passengerEmail }
+          },
+          limit: 20,
+          sortDirection: 'DESC',
         }
-      },
-      error: err => console.warn('Ride subscription error', err)
-    });
-
-    // Poll fallback every 10s
-    pollInterval = setInterval(async () => {
-      try {
-        const res: any = await client.graphql({
-          query: getRideRequest,
-          variables: {
-            id: rideId
-          }
-        });
-        setRide(res.data.getRideRequest);
-      } catch (err) {
-        console.error('Polling error:', err);
-      }
-    }, 10000);
-    return () => {
-      sub.unsubscribe();
-      if (pollInterval) clearInterval(pollInterval);
-      if (countdownRef.current) clearInterval(countdownRef.current);
-      if (routeIntervalRef.current) clearInterval(routeIntervalRef.current);
-    };
-  }, [rideId, updateRoutePolyline]);
-
-  // ---------- Polyline color ----------
-  const polylineColor = useMemo(() => {
-    if (!ride) return '#7f8c8d';
-    if (ride.rideStatus === 'Active') return '#27ae60';
-    if (ride.rideStatus === 'TransportApproved') return '#e58d29';
-    return '#7f8c8d';
-  }, [ride?.rideStatus]);
-
-  // ---------- Navigate safely ----------
-  useEffect(() => {
-    if (shouldGoBack) {
-      navigation.goBack();
-      setShouldGoBack(false);
+      });
+      const items = res?.data?.listRideRequests?.items || [];
+      items.sort((a: any, b: any) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+      setRides(items);
+    } catch (err) {
+      // Optionally show error
     }
-  }, [shouldGoBack, navigation]);
-  if (loading || !ride || !userLocation) {
+  };
+
+  if (loading) {
     return <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" />
-        <Text>Waiting for rider to accept…</Text>
-        {ride?.rideStatus === 'Pending' && <Text>Time remaining: {countdown}s</Text>}
-      </View>;
-  }
-  const pickup = ride.pickupLatitude && ride.pickupLongitude ? {
-    latitude: ride.pickupLatitude,
-    longitude: ride.pickupLongitude
-  } : null;
-  const destination = ride.destinationLatitude && ride.destinationLongitude ? {
-    latitude: ride.destinationLatitude,
-    longitude: ride.destinationLongitude
-  } : null;
-  const riderLocation = ride.riderLatitude && ride.riderLongitude ? {
-    latitude: ride.riderLatitude,
-    longitude: ride.riderLongitude
-  } : null;
-  return <View style={{
-    flex: 1
-  }}>
-      <MapView ref={mapRef} style={{
-      flex: 1
-    }} initialRegion={{
-      latitude: userLocation.latitude,
-      longitude: userLocation.longitude,
-      latitudeDelta: 0.05,
-      longitudeDelta: 0.05
-    }}>
-        {userLocation && <Marker coordinate={userLocation}><View style={styles.passengerMarker}><Text style={{
-            color: '#fff'
-          }}>You</Text></View></Marker>}
-        {riderLocation && <Marker coordinate={riderLocation}><View style={styles.riderMarker}><Text style={{
-            color: '#fff'
-          }}>{ride.riderName}</Text></View></Marker>}
-        {pickup && <Marker coordinate={pickup}><View style={styles.pickupMarker}><Text style={{
-            color: '#fff'
-          }}>Pickup</Text></View></Marker>}
-        {destination && <Marker coordinate={destination}><View style={styles.destinationMarker}><Text style={{
-            color: '#fff'
-          }}>Drop</Text></View></Marker>}
-        {routeCoords.length > 0 && <Polyline key={`${ride?.rideStatus}-${polylineColor}-${routeCoords.length}`} coordinates={routeCoords} strokeColor={polylineColor} strokeWidth={4} />}
-      </MapView>
-
-      <View style={styles.infoPanel}>
-        <Text style={{
-        fontWeight: '700',
-        fontSize: 16
-      }}>{ride.riderName}</Text>
-        <Text>Contact: {ride.riderContact}</Text>
-        <Text>Distance: {(ride.distance || 0).toFixed(2)} km • Est: KES {ride.estimatedCost || 0}</Text>
-        <Text>Payment: {ride.paymentMethod as PaymentMethod} ({ride.paymentStatus})</Text>
-        <Text>Status: {ride.rideStatus}</Text>
-
-        <View style={{
-        flexDirection: 'row',
-        marginTop: 8
-      }}>
-          {ride.rideStatus === 'TransportApproved' && <TouchableOpacity style={[styles.btn, {
-          backgroundColor: '#e58d29'
-        }]} onPress={initiateTrip}><Text style={{
-            color: '#fff'
-          }}>Initiate Trip</Text></TouchableOpacity>}
-          {ride.rideStatus !== 'Cancelled' && ride.rideStatus !== 'Completed' && <>
-            <TouchableOpacity style={styles.btn} onPress={cancelRide}><Text style={{
-              color: '#fff'
-            }}>Cancel Ride</Text></TouchableOpacity>
-            {ride.rideStatus === 'Active' && <TouchableOpacity style={[styles.btn, {
-            marginLeft: 10
-          }]} onPress={completeRide}><Text style={{
-              color: '#fff'
-            }}>Mark Complete</Text></TouchableOpacity>}
-          </>}
-        </View>
-      </View>
+      <ActivityIndicator size="large" />
+      <Text>Loading your ride requests…</Text>
     </View>;
+  }
+
+  if (!rides.length) {
+    return <View style={styles.loadingContainer}>
+      <Text>No ride requests found.</Text>
+    </View>;
+  }
+
+  const selectedRide = rides[selectedIdx];
+
+  let initialRegion = {
+    latitude: selectedRide?.pickupLatitude || 0.0236,
+    longitude: selectedRide?.pickupLongitude || 37.9062,
+    latitudeDelta: 0.1,
+    longitudeDelta: 0.1
+  };
+
+  return (
+    <View style={{ flex: 1, backgroundColor: '#fff' }}>
+      <MapView
+        ref={mapRef}
+        style={{ width: SCREEN_WIDTH, height: SCREEN_HEIGHT * 0.45 }}
+        initialRegion={initialRegion}
+      >
+        <UrlTile
+          urlTemplate="https://api.maptiler.com/maps/streets/{z}/{x}/{y}.png?key=IXsiA7phXPF3BeMY5KKp"
+          maximumZ={19}
+          flipY={false}
+        />
+        {selectedRide?.riderLatitude && selectedRide?.riderLongitude && (
+          <Marker coordinate={{ latitude: selectedRide.riderLatitude, longitude: selectedRide.riderLongitude }}>
+            <View style={{ backgroundColor: '#1f8ef1', padding: 6, borderRadius: 6 }}>
+              <Text style={{ color: '#fff', fontWeight: '700' }}>{` ${transportMap.current[selectedRide.selectedRiderID]?.numberPlate || selectedRide.riderName || 'Rider'}`}</Text>
+            </View>
+          </Marker>
+        )}
+        {selectedRide?.pickupLatitude && selectedRide?.pickupLongitude && (
+          <Marker coordinate={{ latitude: selectedRide.pickupLatitude, longitude: selectedRide.pickupLongitude }}>
+            <View style={{ backgroundColor: '#27ae60', padding: 6, borderRadius: 6 }}>
+              <Text style={{ color: '#fff', fontWeight: '700' }}>📍 Pick up</Text>
+            </View>
+          </Marker>
+        )}
+        {selectedRide?.destinationLatitude && selectedRide?.destinationLongitude && (
+          <Marker coordinate={{ latitude: selectedRide.destinationLatitude, longitude: selectedRide.destinationLongitude }}>
+            <View style={{ backgroundColor: '#9b59b6', padding: 6, borderRadius: 6 }}>
+              <Text style={{ color: '#fff', fontWeight: '700' }}>🎯 Destination</Text>
+            </View>
+          </Marker>
+        )}
+        {/* Polylines */}
+        {routeToPickup.length > 0 && selectedRide?.rideStatus !== 'Active' && <Polyline coordinates={routeToPickup} strokeColor="blue" strokeWidth={4} />}
+        {routeToDrop.length > 0 && <Polyline coordinates={routeToDrop} strokeColor="#e58d29" strokeWidth={4} /> }
+      </MapView>
+      <Text style={styles.header}>Your Ride Requests</Text>
+      <FlatList
+        data={rides}
+        horizontal
+        keyExtractor={item => item.id}
+        contentContainerStyle={{ padding: 16 }}
+        extraData={selectedIdx}
+        renderItem={({ item, index }) => (
+          <View style={[styles.card, selectedIdx === index && { borderColor: '#1f8ef1', borderWidth: 2 }]}
+            onTouchStart={() => setSelectedIdx(index)}>
+            <Text style={styles.cardTitle}>{item.riderName || 'Rider'}</Text>
+            <Text>Status: {item.rideStatus}</Text>
+            {/* Route distance (pickup -> destination) */}
+            <Text>Route distance: {(selectedIdx === index && routeDistanceKm != null) ? routeDistanceKm.toFixed(2) : (item.distance || 0).toFixed(2)} km</Text>
+            {/* Estimated / live cost */}
+            <Text>Est. Cost: KES {selectedIdx === index && routeDistanceKm != null ? Math.round((item.riderRate || 0) * routeDistanceKm) : (item.estimatedCost || 0)}</Text>
+            {/* Distance to pickup or live trip metrics for selected ride */}
+            {selectedIdx === index && item.riderLatitude && item.riderLongitude && item.rideStatus !== 'Active' ? <Text>Distance to pickup: {getDistanceKm(item.riderLatitude, item.riderLongitude, item.pickupLatitude, item.pickupLongitude).toFixed(2)} km</Text> : null}
+            {selectedIdx === index && item.rideStatus === 'Active' ? <Text>Live distance: {(item.distance || 0).toFixed(2)} km • Cost: KES {(item.estimatedCost || 0).toFixed(2)}</Text> : null}
+            <Text>Requested: {item.createdAt ? new Date(item.createdAt).toLocaleString() : ''}</Text>
+            {/* Action buttons depending on status */}
+            <View style={{ flexDirection: 'row', marginTop: 8 }}>
+                {item.rideStatus === 'transportRequestYes' && (
+                <Text style={styles.actionBtn} onPress={() => updateRideStatus(item, 'Cancelled')}>Cancel Ride</Text>
+              )}
+              {/* Passenger cannot start/complete trips; those actions are performed by the transporter */}
+            </View>
+          </View>
+        )}
+        showsHorizontalScrollIndicator={false}
+      />
+    </View>
+  );
 }
+
 const styles = StyleSheet.create({
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
-    alignItems: 'center'
+    alignItems: 'center',
+    backgroundColor: '#fff'
   },
-  infoPanel: {
-    position: 'absolute',
-    bottom: 12,
-    left: 12,
-    right: 12,
-    backgroundColor: 'rgba(255,255,255,0.95)',
-    padding: 12,
-    borderRadius: 8,
-    elevation: 6
+  header: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    marginTop: 12,
+    marginLeft: 16
   },
-  btn: {
+  card: {
+    backgroundColor: '#f5f5f5',
+    borderRadius: 10,
+    padding: 16,
+    marginRight: 16,
+    width: SCREEN_WIDTH * 0.8,
+    elevation: 2,
+    minHeight: 180,
+    justifyContent: 'center',
+  },
+  cardTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    marginBottom: 8
+  },
+  actionBtn: {
+    color: '#fff',
     backgroundColor: '#1f8ef1',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 6
-  },
-  passengerMarker: {
-    backgroundColor: '#e58d29',
-    padding: 4,
-    borderRadius: 4,
-    alignItems: 'center'
-  },
-  riderMarker: {
-    backgroundColor: '#1f8ef1',
-    padding: 4,
-    borderRadius: 4,
-    alignItems: 'center'
-  },
-  pickupMarker: {
-    backgroundColor: '#27ae60',
-    padding: 4,
-    borderRadius: 4,
-    alignItems: 'center'
-  },
-  destinationMarker: {
-    backgroundColor: '#9b59b6',
-    padding: 4,
-    borderRadius: 4,
-    alignItems: 'center'
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 6,
+    marginRight: 8,
+    overflow: 'hidden',
+    fontWeight: 'bold',
   }
 });

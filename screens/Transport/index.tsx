@@ -4,19 +4,19 @@ import { View, Text, ImageBackground, Pressable, FlatList, SafeAreaView, ScrollV
 import styles from './styles';
 import { TouchableOpacity } from 'react-native-gesture-handler';
 import { LinearGradient } from 'expo-linear-gradient';
-const MyAccount = props => {
-  const navigation = useNavigation();
+const MyAccount = (props: any) => {
+  const navigation = useNavigation<any>();
   const Section = ({
     title,
     options
-  }) => <View style={styles.clientsView}>
+  }: { title: string; options: any[] }) => <View style={styles.clientsView}>
       <Text style={styles.salesText}>{title}</Text>
       <View style={styles.viewForClientsAndTitle}>
         {options.map(({
         label,
         onPress,
         style
-      }, index) => <Pressable key={index} onPress={onPress} style={style || styles.viewForClientsPressables}>
+      }, index: number) => <Pressable key={index} onPress={onPress} style={style || styles.viewForClientsPressables}>
             <LinearGradient colors={['#FF8C00', '#00BFFF']} // Orange to Sky Blue gradient
         start={{
           x: 0,
@@ -71,6 +71,10 @@ const MyAccount = props => {
   const RegisterTransport = () => {
     navigation.navigate('RegisterTransport');
   };
+
+  const nav: any = navigation;
+  nav.navigate("Homes", { screen: "RegisterTransport" });
+
   return <SafeAreaView>
       <ScrollView>
       <LinearGradient colors={['#FF8C00', 'skyblue', 'white']} // Linear gradient for orange hues
@@ -89,7 +93,7 @@ const MyAccount = props => {
         {
           label: 'Register Transport - Transporter',
           onPress: RegisterTransport,
-          style: styles.ClientsPressables
+          style: (styles as any).ClientsPressables
         }, {
           label: 'View Account: Reset Location, Delete Account, Share Revenue, View Transport Revenue earnings and shares - Transporter',
           onPress: VwTransportAccount,
@@ -112,9 +116,11 @@ const MyAccount = props => {
           style: styles.ClientsPressables
         }, {
           label: 'Request Ride - Passenger; coming soon....',
+          onPress: PassengerRequestRide,
           style: styles.ClientsPressables
         }, {
           label: 'Accept Ride Request- Rider; coming soon....',
+          onPress: AcceptRideRequest,
           style: styles.ClientsPressables
         }]} />
 

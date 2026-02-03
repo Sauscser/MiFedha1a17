@@ -32,6 +32,9 @@
       },
       "storage": {
         "MifedhaPhotos": {}
+      },
+      "api": {
+        "mifedha1a": {}
       }
     }
   }

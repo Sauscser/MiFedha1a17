@@ -59,6 +59,15 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     width: '100%',
     marginBottom: 8
+  },
+  // Backwards-compatible alias used in many files
+  ClientsPressables: {
+    padding: 10,
+    marginBottom: 8,
+    borderRadius: 6,
+    width: '100%',
+    justifyContent: 'center',
+    alignItems: 'center'
   }
 });
 export default styles;

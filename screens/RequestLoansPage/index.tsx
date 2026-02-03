@@ -3,7 +3,7 @@ import { useNavigation } from '@react-navigation/native';
 import { View, Text, ImageBackground, Pressable, FlatList, SafeAreaView, Dimensions } from 'react-native';
 import styles from './styles';
 import { TouchableOpacity } from 'react-native-gesture-handler';
-const MyAccount = props => {
+const MyAccount = (props: any) => {
   const navigation = useNavigation();
   const SMDpsitsss = () => {
     navigation.navigate('ElimDpstss');

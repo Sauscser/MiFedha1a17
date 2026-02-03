@@ -65,7 +65,7 @@ const SMASendNonLns = () => {
           }
         }
       })]);
-      const hasLoan = loan1.data.listSMLoansCovereds.items.length > 0 || loan2.data.listCovCreditSellers.items.length > 0 || loan3.data.listCvrdGroupLoans.items.length > 0;
+      const hasLoan = (loan1 as any).data.listSMLoansCovereds.items.length > 0 || (loan2 as any).data.listCovCreditSellers.items.length > 0 || (loan3 as any).data.listCvrdGroupLoans.items.length > 0;
       if (hasLoan) {
         SndChmMmbrMny();
         return;

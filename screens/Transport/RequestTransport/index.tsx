@@ -557,7 +557,7 @@ export default function SalesItemMapScreen({
           width: INPUT_WIDTH,
           marginRight: idx < INPUT_KEYS.length - 1 ? GAP : 0
         }}>
-              <TextInput placeholder={PLACEHOLDERS[key]} keyboardType={['radius', 'transportRate'].includes(key) ? 'numeric' : 'default'} style={styles.input} placeholderTextColor="#999" value={filters[key]} onChangeText={text => setFilters(f => ({
+              <TextInput placeholder={(PLACEHOLDERS as any)[key]} keyboardType={['radius', 'transportRate'].includes(key) ? 'numeric' : 'default'} style={styles.input} placeholderTextColor="#999" value={(filters as any)[key]} onChangeText={text => setFilters(f => ({
             ...f,
             [key]: text
           }))} />

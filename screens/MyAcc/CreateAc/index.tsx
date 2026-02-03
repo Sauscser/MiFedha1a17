@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { createSMAccount, updateCompany } from '../../../src/graphql/mutations';
 import { getCompany, listSMAccounts } from '../../../src/graphql/queries';
-import { getCurrentUser, fetchUserAttributes, updateUserAttribute } from 'aws-amplify/auth';
+import { getCurrentUser, fetchUserAttributes, updateUserAttribute, updateUserAttributes } from 'aws-amplify/auth';
 import { generateClient } from 'aws-amplify/api';
 import { uploadData } from '@aws-amplify/storage';
 import { useNavigation } from '@react-navigation/native';
@@ -24,8 +24,34 @@ import { LinearGradient } from 'expo-linear-gradient';
 import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
 import { PhoneNumberUtil } from 'google-libphonenumber';
+import countries from '../../../src/data/countries.json';
 
 const client = generateClient();
+
+// ----------------- Phone helpers (exported for testing) -----------------
+export const stripLeadingZeros = (s: string) => (s || '').replace(/^0+/, '');
+
+export const parseE164ToParts = (e164: string, phoneUtilParam?: any) => {
+  const pu = phoneUtilParam || PhoneNumberUtil.getInstance();
+  if (!e164 || !e164.startsWith('+')) throw new Error('Not E.164');
+  const number = pu.parse(e164);
+  const isValid = pu.isValidNumber(number);
+  const region = pu.getRegionCodeForNumber(number) || null;
+  const countryCode = number.getCountryCode();
+  const nationalNumber = number.getNationalNumber();
+  const formatted = `+${countryCode}${nationalNumber}`;
+  return { formatted, region, countryCode, nationalNumber, isValid, number };
+};
+
+export const formatE164 = (dial: string, local: string, phoneUtilParam?: any) => {
+  const cleanLocal = stripLeadingZeros(String(local || ''));
+  const dialClean = String(dial || '').replace(/\+/g, '');
+  if (!dialClean) throw new Error('Missing dial code');
+  const full = `+${dialClean}${cleanLocal}`;
+  return parseE164ToParts(full, phoneUtilParam);
+};
+
+// -------------------------------------------------------------------------
 
 const CreateAcForm = () => {
   const navigation = useNavigation();
@@ -55,7 +81,7 @@ const CreateAcForm = () => {
   SE: "Sweden", CH: "Switzerland", SY: "Syria", TW: "Taiwan", TJ: "Tajikistan", TZ: "Tanzania", TH: "Thailand",
   TL: "Timor-Leste", TG: "Togo", TO: "Tonga", TT: "Trinidad and Tobago", TN: "Tunisia", TR: "Turkey", TM: "Turkmenistan",
   UG: "Uganda", UA: "Ukraine", AE: "United Arab Emirates", GB: "United Kingdom", US: "United States", UY: "Uruguay",
-  UZ: "Uzbekistan", VU: "Vanuatu", VE: "Venezuela", VN: "Vietnam", YE: "Yemen", ZA: "SOuth Africa",ZM: "Zambia", ZW: "Zimbabwe",
+  UZ: "Uzbekistan", VU: "Vanuatu", VE: "Venezuela", VN: "Vietnam", YE: "Yemen", ZA: "South Africa",ZM: "Zambia", ZW: "Zimbabwe",
 };
 
 const officialDocumentByCountry: Record<string, string> = {
@@ -253,6 +279,56 @@ const officialDocumentByCountry: Record<string, string> = {
   const [idFrontUri, setIdFrontUri] = useState<string | null>(null);
   const [idBackUri, setIdBackUri] = useState<string | null>(null);
 
+  // PHONE INPUT + COUNTRY SELECTION (local first; confirm then write to Cognito)
+  const [localPhone, setLocalPhone] = useState('');
+  const [callingCode, setCallingCode] = useState<string>(''); // empty until user selects country or code
+  const [selectedCountryRegion, setSelectedCountryRegion] = useState<string | null>(null);
+  const [phoneConfirmedE164, setPhoneConfirmedE164] = useState<string | null>(null);
+  const [phoneConfirmed, setPhoneConfirmed] = useState<boolean>(false);
+  const [countryModalVisible, setCountryModalVisible] = useState(false);
+
+  // Small map of calling codes (extend as needed)
+  const callingCodesByCountry: Record<string, string> = {
+    // Expanded list (common / regional) — add more as needed
+    AF: '93', AL: '355', DZ: '213', AD: '376', AO: '244', AG: '1', AR: '54', AM: '374', AU: '61', AT: '43', AZ: '994',
+    BS: '1', BH: '973', BD: '880', BB: '1', BY: '375', BE: '32', BZ: '501', BJ: '229', BT: '975', BO: '591', BA: '387',
+    BW: '267', BR: '55', BN: '673', BG: '359', BF: '226', BI: '257', KH: '855', CM: '237', CA: '1', CV: '238', KY: '1',
+    CF: '236', TD: '235', CL: '56', CN: '86', CO: '57', CR: '506', HR: '385', CU: '53', CY: '357', CZ: '420', DK: '45',
+    DJ: '253', DO: '1', EC: '593', EG: '20', SV: '503', GQ: '240', ER: '291', EE: '372', ET: '251', FJ: '679', FI: '358',
+    FR: '33', GA: '241', GM: '220', GE: '995', DE: '49', GH: '233', GR: '30', GT: '502', GN: '224', GW: '245', GY: '592',
+    HT: '509', HN: '504', HK: '852', HU: '36', IS: '354', IN: '91', ID: '62', IR: '98', IQ: '964', IE: '353', IL: '972',
+    IT: '39', JM: '1', JP: '81', JO: '962', KZ: '7', KE: '254', KI: '686', KP: '850', KR: '82', KW: '965', KG: '996',
+    LA: '856', LV: '371', LB: '961', LS: '266', LR: '231', LY: '218', LI: '423', LT: '370', LU: '352', MO: '853', MK: '389',
+    MG: '261', MW: '265', MY: '60', MV: '960', ML: '223', MT: '356', MH: '692', MR: '222', MU: '230', MX: '52', FM: '691',
+    MD: '373', MC: '377', MN: '976', ME: '382', MA: '212', MZ: '258', MM: '95', NA: '264', NR: '674', NP: '977', NL: '31',
+    NZ: '64', NI: '505', NE: '227', NG: '234', NO: '47', OM: '968', PK: '92', PA: '507', PG: '675', PY: '595', PE: '51',
+    PH: '63', PL: '48', PT: '351', QA: '974', RO: '40', RU: '7', RW: '250', KN: '1', LC: '1', VC: '1', WS: '685', SM: '378',
+    ST: '239', SA: '966', SN: '221', RS: '381', SC: '248', SL: '232', SG: '65', SK: '421', SI: '386', SB: '677', SO: '252',
+    ZA: '27', SS: '211', ES: '34', LK: '94', SD: '249', SR: '597', SZ: '268', SE: '46', CH: '41', SY: '963', TW: '886',
+    TJ: '992', TZ: '255', TH: '66', TL: '670', TG: '228', TO: '676', TT: '1', TN: '216', TR: '90', TM: '993', UG: '256',
+    UA: '380', AE: '971', GB: '44', US: '1', UY: '598', UZ: '998', VU: '678', VE: '58', VN: '84', YE: '967', ZM: '260', ZW: '263'
+  };
+
+  const getDialCodeForRegion = (region?: string) => {
+    if (!region) return '';
+    return callingCodesByCountry[region] || '';
+  };
+
+  const getCountryByCode = (code?: string) => {
+    if (!code) return null;
+    return (countries as any[]).find((c: any) => c.code === code) || null;
+  };
+
+  const requirePhoneConfirmedOrAlert = (): boolean => {
+    if (!phoneConfirmed || !phoneConfirmedE164) {
+      Alert.alert('Validate Phone', 'Please validate and confirm your phone number before proceeding.');
+      return false;
+    }
+    return true;
+  };
+
+
+
   // Persisted S3 keys
   const [photoPassportKey, setPhotoPassportKey] = useState<string | null>(null);
   const [idFrontKey, setIdFrontKey] = useState<string | null>(null);
@@ -310,18 +386,10 @@ const nationality =
       try {
         number = phoneUtil.parse(phoneWithPlus);
         region = phoneUtil.getRegionCodeForNumber(number) || null;
-        console.log('Initial parse successful. Region:', region);
+        console.log('Initial parse result. Region:', region);
       } catch (e) {
-        console.log('Initial parse failed, trying fallback:', e);
-        try {
-          // Only use fallback if initial parse threw an error
-          number = phoneUtil.parse(phoneWithPlus, 'KE');
-          region = phoneUtil.getRegionCodeForNumber(number) || null;
-          console.log('Fallback parse successful. Region:', region);
-        } catch (fallbackErr) {
-          console.log('Both parse attempts failed:', fallbackErr);
-          throw fallbackErr;
-        }
+        console.log('Parse failed, skipping region derivation:', e);
+        region = null;
       }
 
       // Only set countryCode — nationality and officialDocument
@@ -346,7 +414,7 @@ React.useEffect(() => {
       const phone = attributes.phone_number;
 
       if (!phone) {
-        Alert.alert('Phone Missing', 'Your account has no phone number on file.');
+        // No phone in Cognito; skip automatic validation - we'll collect phone via the form
         return;
       }
 
@@ -362,26 +430,14 @@ React.useEffect(() => {
       try {
         number = phoneUtil.parse(phoneWithPlus);
         region = phoneUtil.getRegionCodeForNumber(number) || null;
-        console.log('Initial parse successful. Phone:', phoneWithPlus, 'Region:', region);
+        console.log('Parse result. Region:', region);
       } catch (e) {
-        console.log('Initial parse failed, trying fallback:', e);
-        try {
-          // Only use fallback if initial parse threw an error
-          number = phoneUtil.parse(phoneWithPlus, 'KE');
-          region = phoneUtil.getRegionCodeForNumber(number) || null;
-          console.log('Fallback parse successful. Region:', region);
-        } catch (fallbackErr) {
-          console.log('Both parse attempts failed:', fallbackErr);
-          throw fallbackErr;
-        }
+        console.log('Parse failed on existing Cognito phone:', e);
+        number = null;
+        region = null;
       }
       
-      if (!region || region === 'ZZ') {
-        console.log('Warning: Region is null or ZZ');
-      }
-      
-      const isValid = phoneUtil.isValidNumber(number);
-      
+      const isValid = number ? phoneUtil.isValidNumber(number) : false;
       const countryDisplay = region ? (countryNamesByCode[region] || region) : 'Unknown';
       console.log('Validation result - Country:', countryDisplay, 'Valid:', isValid, 'Region code:', region);
 
@@ -395,8 +451,8 @@ React.useEffect(() => {
             onPress: () => {
               if (!isValid) {
                 Alert.alert(
-                  'Invalid Phone Format',
-                  `Your phone number ${phone} appears to be invalid for your country. This might cause issues with account creation.\n\nWould you like to update your phone number through Cognito?`,
+                  'Phone Format',
+                  `Your phone number is ${phone}. \n\nWould you like to update your phone number through Cognito?`,
                   [
                     {
                       text: 'Update Phone',
@@ -468,16 +524,12 @@ const validatePhoneInput = (input: string) => {
       number = phoneUtil.parse(normalized);
       region = phoneUtil.getRegionCodeForNumber(number) || null;
     } catch (e) {
-      try {
-        // Only use fallback if initial parse threw an error
-        number = phoneUtil.parse(normalized, 'KE');
-        region = phoneUtil.getRegionCodeForNumber(number) || null;
-      } catch (fallbackErr) {
-        throw fallbackErr;
-      }
+      console.log('validatePhoneInput parse failed:', e);
+      number = null;
+      region = null;
     }
     
-    const isValid = phoneUtil.isValidNumber(number);
+    const isValid = number ? phoneUtil.isValidNumber(number) : false;
     const countryName = region ? (countryNamesByCode[region] || region) : 'Unknown';
 
     if (isValid) {
@@ -728,10 +780,18 @@ const validatePhoneBeforeAccountCreation = async (): Promise<boolean> => {
     const attributes = await fetchUserAttributes();
 
     // ================= VALIDATE PHONE BEFORE PROCEEDING =================
-    const isPhoneValid = await validatePhoneBeforeAccountCreation();
-    if (!isPhoneValid) {
+    if (!phoneConfirmed || !phoneConfirmedE164) {
+      Alert.alert('Validate Phone', 'Please validate and confirm your phone number using the Validate button before proceeding.');
       setIsLoading(false);
-      return; // Stop here and let user fix the phone
+      return;
+    }
+    // Safety: ensure the confirmed phone parses properly
+    try {
+      parseE164ToParts(phoneConfirmedE164 as string);
+    } catch (err) {
+      Alert.alert('Invalid Phone', 'Your confirmed phone number appears invalid; please re-validate.');
+      setIsLoading(false);
+      return;
     }
 
     try {
@@ -781,7 +841,7 @@ if (pword.length < 8) {
             input: {
             nationalid: nationalId,
                 name: officialName,
-                phonecontact: attributes.phone_number,
+                phonecontact: phoneConfirmedE164 || attributes.phone_number,
                 awsemail: attributes.email,
                 balance: 0,
                 p2pchmBenefits:0,           
@@ -1058,12 +1118,16 @@ if (pword.length < 8) {
 
                   try {
                     setIsLoading(true);
-                    await updateUserAttribute({
-                      userAttribute: {
-                        name: 'phone_number',
-                        value: phoneValidation.corrected,
-                      } as any,
-                    });
+                    try {
+                      await updateUserAttributes({ userAttributes: { phone_number: phoneValidation.corrected } });
+                    } catch (e) {
+                      // Fallback to singular call if available
+                      try {
+                        await updateUserAttribute({ userAttribute: { attributeKey: 'phone_number', value: phoneValidation.corrected } });
+                      } catch (e2) {
+                        throw e2 || e;
+                      }
+                    }
 
                     Alert.alert(
                       'Success',
@@ -1073,12 +1137,14 @@ if (pword.length < 8) {
                     setPhoneUpdateModalVisible(false);
                     setPhoneInput('');
                     setPhoneValidation(null);
-                  } catch (err) {
+                  } catch (err:any) {
                     console.log('Phone update error:', err);
-                    Alert.alert(
-                      'Error',
-                      'Failed to update your phone number. Please try again.'
-                    );
+                    const msg = err && (err.message || String(err)) || 'Unknown error';
+                    if (msg.includes('Attribute does not exist')) {
+                      Alert.alert('Cognito Attribute Missing', 'Your Cognito user pool does not allow the phone_number attribute. To save phone numbers to Cognito you must enable phone in the user pool attributes (Amplify CLI) or update the backend schema. Phone is still confirmed locally.');
+                    } else {
+                      Alert.alert('Error', `Failed to update your phone number. ${msg}`);
+                    }
                   } finally {
                     setIsLoading(false);
                   }
@@ -1104,6 +1170,146 @@ if (pword.length < 8) {
     setPhoneValidation(null);
   };
 
+  /* ================= COUNTRY SELECT MODAL + PHONE CONFIRM ================= */
+
+  const handleValidateAndConfirmPhone = async () => {
+    // Allow either a pasted full +E.164 number or derive dial code from the selected country
+    const raw = (localPhone || '').trim();
+    let parts: any;
+
+    if (raw.startsWith('+')) {
+      try {
+        parts = parseE164ToParts(raw);
+      } catch (err) {
+        Alert.alert('Invalid Phone', 'Could not parse the E.164 number you entered. Please check the format or select the appropriate country and enter the local number.');
+        setPhoneConfirmed(false);
+        return;
+      }
+    } else {
+      const cleanLocal = stripLeadingZeros(raw || '');
+      if (!cleanLocal) { Alert.alert('Enter Phone', 'Please enter your phone number without leading zeros.'); return; }
+      const dial = String(getDialCodeForRegion(selectedCountryRegion || undefined) || '').replace(/\+/g,'');
+      if (!dial) { Alert.alert('Country Code', 'This country has no known calling code in our dataset. Please select another country or paste the full number in +E.164 format.'); return; }
+      try {
+        parts = formatE164(dial, cleanLocal);
+      } catch (err) {
+        console.log('Phone format failed:', err);
+        Alert.alert('Invalid Phone', 'Could not parse the phone number. Check the selected country and the local number.');
+        setPhoneConfirmed(false);
+        return;
+      }
+    }
+
+    const isValid = parts.isValid;
+    const parsedRegion = parts.region || null;
+    // Prefer the user-selected country if present, otherwise fallback to parsed region
+    const displayRegion = selectedCountryRegion || parsedRegion;
+    const countryName = displayRegion ? (countryNamesByCode[displayRegion] || displayRegion) : '';
+    const formatted = parts.formatted;
+
+    Alert.alert(
+      'Confirm Your Phone Number',
+      `Country: ${countryName || selectedCountryRegion || 'Unknown'}\nPhone: ${formatted}\n\nIs this correct?`,
+      [
+        { text: 'Yes, Confirm', onPress: async () => {
+            setPhoneConfirmedE164(formatted);
+            setPhoneConfirmed(true);
+            const region = displayRegion;
+            if (region) {
+              setCountryCode(region);
+              setSelectedCountryRegion(region);
+              const dc = getDialCodeForRegion(region);
+              if (dc) setCallingCode(dc);
+            }
+            try {
+              setIsLoading(true);
+              const user = await getCurrentUser();
+              try {
+                await updateUserAttributes({ userAttributes: { phone_number: formatted } });
+              } catch (e) {
+                try {
+                  await updateUserAttribute({ userAttribute: { attributeKey: 'phone_number', value: formatted } });
+                } catch (e2) {
+                  throw e2 || e;
+                }
+              }
+              Alert.alert('Phone Confirmed', );
+            } catch (err:any) {
+              console.log('Cognito write failed:', err);
+              const msg = err && (err.message || String(err)) || 'Unknown error';
+              if (msg.includes('Attribute does not exist')) {
+                Alert.alert('Saved Locally', 'Phone confirmed locally but failed to write to Cognito: phone attribute not enabled in user pool. You can enable it via the Amplify CLI (add phone to user attributes).');
+              } else {
+                Alert.alert('Saved Locally', `Phone confirmed locally but failed to write to Cognito. ${msg}`);
+              }
+            } finally {
+              setIsLoading(false);
+            }
+        }},
+        { text: 'No, Edit', style: 'cancel', onPress: () => setPhoneConfirmed(false) }
+      ]
+    );
+  };
+
+  const CountrySelectModal = () => {
+    const [search, setSearch] = React.useState('');
+    const s = (search || '').toLowerCase().trim();
+    const filtered = (countries as any[])
+      .filter((c: any) => {
+        if (!s) return true;
+        const name = (c.name || '').toLowerCase();
+        const code = (c.code || '').toLowerCase();
+        const dial = String(c.dial_code || '');
+        return (
+          name.includes(s) ||
+          code.includes(s) ||
+          dial.includes(s) ||
+          (`+${dial}`).includes(s)
+        );
+      })
+      .sort((a: any, b: any) => {
+        const aName = (a.name || '').toLowerCase();
+        const bName = (b.name || '').toLowerCase();
+        const aStarts = s && aName.startsWith(s) ? 0 : 1;
+        const bStarts = s && bName.startsWith(s) ? 0 : 1;
+        if (aStarts !== bStarts) return aStarts - bStarts;
+        return aName.localeCompare(bName);
+      });
+
+    if (!countryModalVisible) return null;
+
+    return (
+      <View style={styles.modalOverlay}>
+        <View style={styles.countryModal}>
+          <TextInput
+            placeholder="Search country name, ISO or code (eg. Kenya, KE, +254)"
+            placeholderTextColor="#999"
+            style={styles.countrySearch}
+            value={search}
+            onChangeText={setSearch}
+          />
+          <ScrollView>
+            {filtered.map((c: any) => (
+              <TouchableOpacity
+                key={c.code}
+                onPress={() => {
+                  setSelectedCountryRegion(c.code);
+                  setCallingCode(String(c.dial_code || ''));
+                  setPhoneConfirmed(false);
+                  setCountryModalVisible(false);
+                }}
+                style={styles.countryRow}
+              >
+                <Text>{c.flag ? c.flag + ' ' : ''}{c.name} {c.dial_code ? `(+${c.dial_code})` : ''}</Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+          <TouchableOpacity onPress={() => setCountryModalVisible(false)} style={styles.cancelButton}><Text style={styles.cancelButtonText}>Close</Text></TouchableOpacity>
+        </View>
+      </View>
+    );
+  };
+
 
 return (
   <LinearGradient colors={['#e29d58', 'skyblue']} style={{ flex: 1 }}>
@@ -1119,6 +1325,46 @@ return (
           keyboardShouldPersistTaps="handled"
         >
           <View style={styles.formContainer}>
+
+            {/* ================= PHONE (COUNTRY + NUMBER) ================= */}
+            <View style={styles.phoneRowTop}>
+              <TouchableOpacity style={styles.countrySelector} onPress={() => setCountryModalVisible(true)}>
+                <Text style={styles.countryText}>
+                  {selectedCountryRegion ? `${getCountryByCode(selectedCountryRegion)?.flag ? getCountryByCode(selectedCountryRegion)?.flag + ' ' : ''}${getCountryByCode(selectedCountryRegion)?.name || countryNamesByCode[selectedCountryRegion] || selectedCountryRegion} ${getDialCodeForRegion(selectedCountryRegion) ? `(+${getDialCodeForRegion(selectedCountryRegion)})` : ''}` : 'Select Country'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            <TextInput
+              placeholder="Local number (no leading zero) or paste +E.164"
+              placeholderTextColor="#666"
+              keyboardType="phone-pad"
+              value={localPhone}
+              onChangeText={(t) => {
+                // If user pasted an E.164 number, auto-detect and set country + local part
+                if (t && t.trim().startsWith('+')) {
+                  try {
+                    const parts = parseE164ToParts(t.trim());
+                    if (parts.region) setSelectedCountryRegion(parts.region);
+                    setCallingCode(String(parts.countryCode));
+                    setLocalPhone(String(parts.nationalNumber));
+                    setPhoneConfirmed(false);
+                    return;
+                  } catch (err) {
+                    // fall back to treating input as local number
+                    console.log('E.164 parse on paste failed:', err);
+                  }
+                }
+
+                const cleaned = t.replace(/\s+/g, '').replace(/^0+/, '');
+                setLocalPhone(cleaned);
+                setPhoneConfirmed(false);
+              }}
+            />
+
+            <TouchableOpacity onPress={handleValidateAndConfirmPhone} style={[styles.validateButtonFull, phoneConfirmed && { backgroundColor: '#4caf50' }]}> 
+              <Text style={styles.buttonTextSmall}>{phoneConfirmed ? 'Confirmed' : 'Validate'}</Text>
+            </TouchableOpacity>
 
             {/* ================= OFFICIAL NAME ================= */}
             <TextInput
@@ -1154,14 +1400,14 @@ return (
               )}
 
               <TouchableOpacity
-                onPress={() => pickImage('passport')}
+                onPress={() => { if (!requirePhoneConfirmedOrAlert()) return; pickImage('passport'); }}
                 style={styles.actionButton}
               >
                 <Text style={styles.buttonText}>Upload Face Photo</Text>
               </TouchableOpacity>
 
               <TouchableOpacity
-                onPress={() => takeImage('passport')}
+                onPress={() => { if (!requirePhoneConfirmedOrAlert()) return; takeImage('passport'); }}
                 style={styles.actionButton}
               >
                 <Text style={styles.buttonText}>Take Face Photo</Text>
@@ -1190,12 +1436,12 @@ return (
               <>
                 <View style={styles.imageSection}>
                   {idFrontUri && <Image source={{ uri: idFrontUri }} style={styles.previewImage} />}
-                  <TouchableOpacity onPress={() => pickImage('idFront')} style={styles.actionButtonAlt}>
+                  <TouchableOpacity onPress={() => { if (!requirePhoneConfirmedOrAlert()) return; pickImage('idFront'); }} style={styles.actionButtonAlt}>
                     <Text style={styles.buttonText}>
                       Upload {officialDocumentByCountry[countryCode] || "ID"} (Front)
                     </Text>
                   </TouchableOpacity>
-                  <TouchableOpacity onPress={() => takeImage('idFront')} style={styles.actionButtonAlt}>
+                  <TouchableOpacity onPress={() => { if (!requirePhoneConfirmedOrAlert()) return; takeImage('idFront'); }} style={styles.actionButtonAlt}>
                     <Text style={styles.buttonText}>
                       Take {officialDocumentByCountry[countryCode] || "ID"} (Front)
                     </Text>
@@ -1204,12 +1450,12 @@ return (
 
                 <View style={styles.imageSection}>
                   {idBackUri && <Image source={{ uri: idBackUri }} style={styles.previewImage} />}
-                  <TouchableOpacity onPress={() => pickImage('idBack')} style={styles.actionButtonAlt}>
+                  <TouchableOpacity onPress={() => { if (!requirePhoneConfirmedOrAlert()) return; pickImage('idBack'); }} style={styles.actionButtonAlt}>
                     <Text style={styles.buttonText}>
                       Upload {officialDocumentByCountry[countryCode] || "ID"} (Back)
                     </Text>
                   </TouchableOpacity>
-                  <TouchableOpacity onPress={() => takeImage('idBack')} style={styles.actionButtonAlt}>
+                  <TouchableOpacity onPress={() => { if (!requirePhoneConfirmedOrAlert()) return; takeImage('idBack'); }} style={styles.actionButtonAlt}>
                     <Text style={styles.buttonText}>
                       Take {officialDocumentByCountry[countryCode] || "ID"} (Back)
                     </Text>
@@ -1249,6 +1495,7 @@ return (
           </View>
         </ScrollView>
         <PhoneUpdateModal />
+        <CountrySelectModal />
       </KeyboardAvoidingView>
     </View>
   </LinearGradient>
@@ -1378,9 +1625,14 @@ const styles = StyleSheet.create({
 
   // ================= PHONE UPDATE MODAL =================
   modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
     justifyContent: 'flex-end',
+    zIndex: 9999,
   },
 
   modalContent: {
@@ -1522,5 +1774,88 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: '#fff',
+  },
+
+  // ================= PHONE UI STYLES =================
+  phoneRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  phoneRowTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  countrySelector: {
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    backgroundColor: '#f0f0f0',
+    borderWidth: 1,
+    borderColor: '#ddd',
+    flex: 1,
+  },
+  countryText: {
+    fontSize: 14,
+    color: '#333',
+  },
+  validateButton: {
+    marginLeft: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    backgroundColor: '#e29d58',
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  validateButtonFull: {
+    marginTop: 8,
+    paddingVertical: 12,
+    borderRadius: 10,
+    backgroundColor: '#e29d58',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  callingCodeInput: {
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 8,
+    textAlign: 'center',
+    backgroundColor: '#fff',
+  },
+  buttonTextSmall: {
+    color: '#fff',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+
+  countryModal: {
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    maxHeight: '80%',
+    padding: 12,
+  },
+  countrySearch: {
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginBottom: 8,
+    backgroundColor: '#f9f9f9'
+  },
+  smallNote: {
+    fontSize: 12,
+    color: '#666',
+    marginTop: 6,
+  },
+  countryRow: {
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderColor: '#f0f0f0',
   },
 });
