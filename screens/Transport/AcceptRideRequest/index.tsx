@@ -10,23 +10,37 @@ import { onUpdateRideRequest } from '../../../src/graphql/subscriptions';
 import { Observable } from 'zen-observable-ts';
 import { updateRideRequest, updateSMAccount, updateTransportRegister, updateCompany } from '../../../src/graphql/mutations';
 import { getCurrentUser, fetchUserAttributes } from "aws-amplify/auth";
+import { Hub } from '@aws-amplify/core';
 import { generateClient } from "aws-amplify/api";
 const client = generateClient();
 const SCREEN_WIDTH = Dimensions.get('window').width;
 const SCREEN_HEIGHT = Dimensions.get('window').height;
 const MIN_PICKUP_DISTANCE = 0.1; // km (100 meters minimum)
-const MIN_REAL_MOVEMENT_KM = 0.150; // 30m
+const MIN_REAL_MOVEMENT_KM = 0.01; // km (10 meters) - ignore tiny jitter
+const MIN_SAVE_DISTANCE_KM = 0.05; // km (50 meters) - save after every ~50m moved
+const MAX_ACCEPTABLE_ACCURACY_M = 100; // meters - acceptable GPS accuracy for immediate saves
+const SAVE_FALLBACK_INTERVAL_MS = 120_000; // 2 minutes - fallback save during poor GPS / outages
+const FALLBACK_CHECK_INTERVAL_MS = 30_000; // check fallback every 30s
+
+// Metrics persistence
+const METRICS_STORAGE_KEY = 'rideMetricsBackup_v1';
+const SAVE_METRICS_INTERVAL_MS = 30_000; // persist metrics to AsyncStorage every 30s
+
 const COMPANY_ADMIN_ID = "BaruchHabaB'ShemAdonai2";
+// Location type with optional accuracy to align with Expo Location objects
+type LocationWithAccuracy = {
+  latitude: number;
+  longitude: number;
+  accuracy?: number | null;
+  coords?: { accuracy?: number | null };
+};
 // Removed Google Maps API Key. Using OSRM and OSM.
 export default function RiderRideRequestScreen() {
   const [rides, setRides] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [userContact, setUserContact] = useState<string | null>(null);
   const [selectedRideId, setSelectedRideId] = useState<string | null>(null);
-  const [riderLocation, setRiderLocation] = useState<{
-    latitude: number;
-    longitude: number;
-  } | null>(null);
+  const [riderLocation, setRiderLocation] = useState<LocationWithAccuracy | null>(null);
   const [tripStarted, setTripStarted] = useState(false);
   const mapRef = useRef<MapView | null>(null);
   const carouselRef = useRef<FlatList | null>(null);
@@ -35,10 +49,7 @@ export default function RiderRideRequestScreen() {
   const carouselPosition = useRef(new Animated.Value(SCREEN_HEIGHT * 0.62)).current;
   const appState = useRef(AppState.currentState);
   const locationSubscription = useRef<Location.LocationSubscription | null>(null);
-  const lastLocationRef = useRef<{
-    latitude: number;
-    longitude: number;
-  } | null>(null);
+  const lastLocationRef = useRef<LocationWithAccuracy | null>(null);
   const lastCameraCenter = useRef<{
     latitude: number;
     longitude: number;
@@ -66,13 +77,136 @@ export default function RiderRideRequestScreen() {
     }
   };
 
+  // Metrics persistence helpers
+  const metricsSaveIntervalRef = useRef<number | null>(null);
+  const userContactRef = useRef<string | null>(null);
+  const hubUnsubscribeRef = useRef<(() => void) | null>(null);
+  const getMetricsKeyForUser = (email?: string) => `${METRICS_STORAGE_KEY}:${email || userContactRef.current || 'unknown'}`;
+
+  const loadMetricsFromStorage = async (email?: string) => {
+    const key = getMetricsKeyForUser(email);
+    if (!userContactRef.current && !email) return;
+    try {
+      const raw = await AsyncStorage.getItem(key);
+      if (!raw) return;
+      const obj = JSON.parse(raw);
+      cumulativeDistanceRef.current = obj.distance || {};
+      cumulativeCostRef.current = obj.cost || {};
+      lastLocationRef.current = obj.lastLocation || null;
+      lastSaveDistanceRef.current = obj.lastSavedDistance || {};
+      lastSaveTimeRef.current = obj.lastSavedTime || {};
+    } catch (e) {
+      console.warn('Failed to load ride metrics from storage', e);
+    }
+  };
+  const saveMetricsToStorage = async (email?: string) => {
+    const key = getMetricsKeyForUser(email);
+    if (!userContactRef.current && !email) return;
+    try {
+      const payload = {
+        distance: cumulativeDistanceRef.current,
+        cost: cumulativeCostRef.current,
+        lastLocation: lastLocationRef.current,
+        lastSavedDistance: lastSaveDistanceRef.current,
+        lastSavedTime: lastSaveTimeRef.current
+      };
+      await AsyncStorage.setItem(key, JSON.stringify(payload));
+    } catch (e) {
+      console.warn('Failed to save ride metrics to storage', e);
+    }
+  };
+
+  const clearMetricsForUser = async (email?: string) => {
+    const key = getMetricsKeyForUser(email);
+    try {
+      await AsyncStorage.removeItem(key);
+    } catch (e) {
+      console.warn('Failed to remove metrics for user', e);
+    }
+    cumulativeDistanceRef.current = {};
+    cumulativeCostRef.current = {};
+    lastLocationRef.current = null;
+    lastSaveDistanceRef.current = {};
+    lastSaveTimeRef.current = {};
+  };
+
   const transportMap = useRef<Record<string, any>>({});
   const cumulativeDistanceRef = useRef<Record<string, number>>({});
   const cumulativeCostRef = useRef<Record<string, number>>({});
+  // Save bookkeeping: last saved distance and time per ride, and a flag to avoid concurrent saves
+  const lastSaveDistanceRef = useRef<Record<string, number>>({});
+  const lastSaveTimeRef = useRef<Record<string, number>>({});
+  const saveInProgressRef = useRef<Record<string, boolean>>({});
   const routeToPickupRef = useRef<any[]>([]);
   const routeToDropRef = useRef<any[]>([]);
   const updateIntervalRef = useRef<number | null>(null);
   const [polylineTick, setPolylineTick] = useState(0);
+
+  // Load metrics and start periodic persistence per-user; clear on sign-out
+  useEffect(() => {
+    if (!userContact) return;
+    userContactRef.current = userContact;
+
+    let hubListener: any = null;
+    (async () => {
+      await loadMetricsFromStorage(userContact);
+      // Start periodic persistence
+      metricsSaveIntervalRef.current = setInterval(() => {
+        saveMetricsToStorage().catch(() => {});
+      }, SAVE_METRICS_INTERVAL_MS) as unknown as number;
+    })();
+
+    // Save on background/inactive
+    const sub = AppState.addEventListener('change', next => {
+      if (next === 'background' || next === 'inactive') {
+        saveMetricsToStorage().catch(() => {});
+      }
+      appState.current = next;
+    });
+
+    // Clear metrics when user signs out
+    const authListener = (caps: any) => {
+      const event = caps?.payload?.event ?? caps?.payload;
+      if (event === 'signOut' || event === 'signedOut') {
+        clearMetricsForUser(userContactRef.current!).catch(() => {});
+      }
+    };
+
+    // Register auth listener if Hub is available
+    try {
+      if (typeof Hub !== 'undefined' && Hub && typeof Hub.listen === 'function') {
+        const unsub = Hub.listen('auth', authListener);
+        if (typeof unsub === 'function') {
+          hubUnsubscribeRef.current = unsub;
+        } else if (unsub && typeof (unsub as any).remove === 'function') {
+          hubUnsubscribeRef.current = () => (unsub as any).remove();
+        }
+      } else {
+        console.warn('Amplify Hub is not available; auth sign-out clearing disabled');
+      }
+    } catch (e) {
+      console.warn('Failed to register auth Hub listener', e);
+    }
+
+    // cleanup
+    return () => {
+      const v = metricsSaveIntervalRef.current;
+      if (v != null) {
+        try { clearInterval(v); } catch (e) {}
+        metricsSaveIntervalRef.current = null;
+      }
+      sub.remove?.();
+      // also attempt one last save
+      saveMetricsToStorage().catch(() => {});
+      try {
+        if (hubUnsubscribeRef.current) {
+          try { hubUnsubscribeRef.current(); } catch (e) {}
+          hubUnsubscribeRef.current = null;
+        }
+      } catch (e) {}
+    };
+  }, [userContact]);
+
   useEffect(() => {
     let sub: any = null;
     const init = async () => {
@@ -261,14 +395,19 @@ export default function RiderRideRequestScreen() {
 
       const lat = loc.coords.latitude;
       const lng = loc.coords.longitude;
-      const newLoc = {
+      const accuracy = loc.coords.accuracy;
+      const newLoc: LocationWithAccuracy = {
         latitude: lat,
-        longitude: lng
+        longitude: lng,
+        accuracy,
+        coords: loc.coords
       };
       const prev = lastLocationRef.current;
-      const smoothLoc = prev ? {
+      const smoothLoc: LocationWithAccuracy = prev ? {
         latitude: 0.7 * prev.latitude + 0.3 * newLoc.latitude,
-        longitude: 0.7 * prev.longitude + 0.3 * newLoc.longitude
+        longitude: 0.7 * prev.longitude + 0.3 * newLoc.longitude,
+        accuracy: newLoc.accuracy,
+        coords: newLoc.coords
       } : newLoc;
       const movedKm = prev ? getDistanceKm(prev.latitude, prev.longitude, smoothLoc.latitude, smoothLoc.longitude) : Infinity;
       if (movedKm < MIN_REAL_MOVEMENT_KM) return;
@@ -279,8 +418,48 @@ export default function RiderRideRequestScreen() {
       cumulativeCostRef.current[ride.id] = (cumulativeCostRef.current[ride.id] || 0) + movedKm * rate;
       setRideMetricsTick(t => t + 1); // trigger carousel re-render
 
+      // Persist metrics locally immediately to reduce data loss risk
+      saveMetricsToStorage().catch(() => {});
+
+
       lastLocationRef.current = smoothLoc;
       setRiderLocation(smoothLoc);
+
+      // Try to save if we've moved enough since last save and accuracy is acceptable
+      try {
+        const lastSaved = lastSaveDistanceRef.current[ride.id] || 0;
+        const movedSinceSave = (cumulativeDistanceRef.current[ride.id] || 0) - lastSaved;
+        const accM = smoothLoc.accuracy ?? smoothLoc.coords?.accuracy ?? 9999;
+        if (movedSinceSave >= MIN_SAVE_DISTANCE_KM && accM <= MAX_ACCEPTABLE_ACCURACY_M) {
+          if (!saveInProgressRef.current[ride.id]) {
+            saveInProgressRef.current[ride.id] = true;
+            try {
+              await client.graphql({
+                query: updateRideRequest,
+                variables: {
+                  input: {
+                    id: ride.id,
+                    riderLatitude: smoothLoc.latitude,
+                    riderLongitude: smoothLoc.longitude,
+                    estimatedCost: cumulativeCostRef.current[ride.id] || 0,
+                    distance: cumulativeDistanceRef.current[ride.id] || 0
+                  }
+                }
+              });
+              lastSaveDistanceRef.current[ride.id] = cumulativeDistanceRef.current[ride.id] || 0;
+              lastSaveTimeRef.current[ride.id] = Date.now();
+              console.log(`Auto-saved ride ${ride.id} after ${Math.round(movedSinceSave * 1000)} m`);
+            } catch (err) {
+              console.error('Auto-save error', err);
+            } finally {
+              saveInProgressRef.current[ride.id] = false;
+            }
+          }
+        }
+      } catch (err) {
+        console.warn('Auto-save check failed', err);
+      }
+
       try {
         await fetchCachedRoute(ride, smoothLoc);
       } catch (err) {}
@@ -293,30 +472,39 @@ export default function RiderRideRequestScreen() {
       updateIntervalRef.current = null;
     }
 
-    // Start 30-second auto-update interval
+    // Fallback periodic checker: flush if we haven't saved recently (handles GPS outages / tall buildings)
     updateIntervalRef.current = setInterval(async () => {
       if (!ride.id || !lastLocationRef.current) return;
-      const movedKm = cumulativeDistanceRef.current[ride.id] || 0;
-      if (movedKm >= MIN_REAL_MOVEMENT_KM) {
-        try {
-          await client.graphql({
-            query: updateRideRequest,
-            variables: {
-              input: {
-                id: ride.id,
-                riderLatitude: lastLocationRef.current.latitude,
-                riderLongitude: lastLocationRef.current.longitude,
-                estimatedCost: cumulativeCostRef.current[ride.id] || 0,
-                distance: cumulativeDistanceRef.current[ride.id] || 0
+      const now = Date.now();
+      const lastSavedTime = lastSaveTimeRef.current[ride.id] || 0;
+      const timeSinceLastSave = now - lastSavedTime;
+      if (timeSinceLastSave >= SAVE_FALLBACK_INTERVAL_MS) {
+        if (!saveInProgressRef.current[ride.id]) {
+          saveInProgressRef.current[ride.id] = true;
+          try {
+            await client.graphql({
+              query: updateRideRequest,
+              variables: {
+                input: {
+                  id: ride.id,
+                  riderLatitude: lastLocationRef.current.latitude,
+                  riderLongitude: lastLocationRef.current.longitude,
+                  estimatedCost: cumulativeCostRef.current[ride.id] || 0,
+                  distance: cumulativeDistanceRef.current[ride.id] || 0
+                }
               }
-            }
-          });
-          console.log(`Rider location auto-updated for ride ${ride.id}`);
-        } catch (err) {
-          console.error('Auto-update error', err);
+            });
+            lastSaveDistanceRef.current[ride.id] = cumulativeDistanceRef.current[ride.id] || 0;
+            lastSaveTimeRef.current[ride.id] = now;
+            console.log(`Fallback auto-saved ride ${ride.id} after ${Math.round((cumulativeDistanceRef.current[ride.id] || 0) * 1000)} m`);
+          } catch (err) {
+            console.error('Fallback auto-save error', err);
+          } finally {
+            saveInProgressRef.current[ride.id] = false;
+          }
         }
       }
-    }, 30_000) as unknown as number;
+    }, FALLBACK_CHECK_INTERVAL_MS) as unknown as number;
   }, [tripStarted, fetchCachedRoute, maybeAnimateCamera]);
   const stopTracking = useCallback(() => {
     if (locationSubscription.current) {
@@ -325,12 +513,22 @@ export default function RiderRideRequestScreen() {
       } catch (e) {}
       locationSubscription.current = null;
     }
-    if (updateIntervalRef.current) {
-      try {
-        clearInterval(updateIntervalRef.current);
-      } catch (e) {}
-      updateIntervalRef.current = null;
+    {
+      const v = updateIntervalRef.current;
+      if (v != null) {
+        try { clearInterval(v); } catch (e) {}
+        updateIntervalRef.current = null;
+      }
     }
+    {
+      const v2 = metricsSaveIntervalRef.current;
+      if (v2 != null) {
+        try { clearInterval(v2); } catch (e) {}
+        metricsSaveIntervalRef.current = null;
+      }
+    }
+    // Ensure metrics are persisted when tracking stops
+    saveMetricsToStorage().catch(() => {});
   }, []);
   const fetchRides = useCallback(async (transportOwnerEmail: string) => {
     setLoading(true);
@@ -624,6 +822,8 @@ export default function RiderRideRequestScreen() {
       cumulativeCostRef.current[ride.id] = 0;
       cumulativeDistanceRef.current[ride.id] = 0;
       lastLocationRef.current = null;
+      // Persist reset metrics
+      await saveMetricsToStorage();
       stopTracking();
       setTripStarted(false);
       Alert.alert('Payment cleared', 'Company share forwarded successfully.');
@@ -643,6 +843,13 @@ export default function RiderRideRequestScreen() {
     if (!cumulativeDistanceRef.current[ride.id]) cumulativeDistanceRef.current[ride.id] = 0;
     if (!cumulativeCostRef.current[ride.id]) cumulativeCostRef.current[ride.id] = 0;
     setTripStarted(ride.rideStatus === 'Active');
+
+    // Initialize last-save markers so distance-since-save is computed from a sensible baseline
+    lastSaveDistanceRef.current[ride.id] = cumulativeDistanceRef.current[ride.id] || ride.distance || 0;
+    lastSaveTimeRef.current[ride.id] = Date.now();
+    if (!lastLocationRef.current && ride.riderLatitude && ride.riderLongitude) {
+      lastLocationRef.current = { latitude: ride.riderLatitude, longitude: ride.riderLongitude };
+    }
 
     // 2️⃣ Get current location immediately
     let currentLoc = riderLocation;

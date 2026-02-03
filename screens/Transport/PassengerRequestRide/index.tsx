@@ -558,7 +558,7 @@ export default function RideRequestMapScreen({
         {filteredRiders.map((rider, idx) => (
           <Marker key={rider.id} coordinate={{ latitude: rider.latitude, longitude: rider.longitude }} onPress={() => focusOnRider(rider, idx)}>
             <View style={[styles.markerContainer, selectedRiderId === rider.id && styles.selectedMarker]}>
-              <Text style={styles.markerText}>{selectedRiderId === rider.id ? `🚗 ${rider.numberPlate || rider.transportName?.slice(0,6)}` : `KES ${Math.round(rider._estimatedCost || 0)}`}</Text>
+              <Text style={styles.markerText}>{selectedRiderId === rider.id ? ` ${rider.numberPlate || rider.transportName?.slice(0,6)}` : `KES ${Math.round(rider._estimatedCost || 0)}`}</Text>
             </View>
           </Marker>
         ))}

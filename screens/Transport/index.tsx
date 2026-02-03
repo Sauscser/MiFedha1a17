@@ -115,11 +115,11 @@ const MyAccount = (props: any) => {
           onPress: VwBiz2DispatchDelivery,
           style: styles.ClientsPressables
         }, {
-          label: 'Request Ride - Passenger; coming soon....',
+          label: 'Customer/Passenger',
           onPress: PassengerRequestRide,
           style: styles.ClientsPressables
         }, {
-          label: 'Accept Ride Request- Rider; coming soon....',
+          label: 'Rider',
           onPress: AcceptRideRequest,
           style: styles.ClientsPressables
         }]} />

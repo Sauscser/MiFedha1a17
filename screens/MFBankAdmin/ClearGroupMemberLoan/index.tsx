@@ -112,8 +112,8 @@ const AdminClearLoans = () => {
       const members = membersRes?.data?.listChamaMembers?.items || [];
       setGroupSize(members.length);
 
-      const loansWithNames = loansRaw.map(loan => {
-        const member = members.find(m => m.memberContact === loan.loaneeEmail);
+      const loansWithNames = loansRaw.map((loan: any) => {
+        const member = members.find((m: any) => m.memberContact === loan.loaneeEmail);
         return {
           ...loan,
           loaneeName: member?.memberName || 'Unknown',
@@ -166,18 +166,23 @@ const AdminClearLoans = () => {
         return;
       }
 
-      const [itemsRes, attendanceRes] = await Promise.all([
+      const [itemsResRaw, attendanceResRaw] = await Promise.all([
         client.graphql({ query: listMinuteItemsByMinutes, variables: { minutesId: min.id } }),
         client.graphql({ query: listAttendanceByMinutes, variables: { minutesId: min.id } }),
       ]);
 
-      const chairSignUrl = min.chairpersonId ? (await getUrl({ key: min.chairpersonId }))?.url : null;
-      const secSignUrl = min.secretaryId ? (await getUrl({ key: min.secretaryId }))?.url : null;
+      const itemsRes: any = itemsResRaw;
+      const attendanceRes: any = attendanceResRaw;
+
+      const chairSignRes: any = min.chairpersonId ? await getUrl({ key: min.chairpersonId }) : null;
+      const secSignRes: any = min.secretaryId ? await getUrl({ key: min.secretaryId }) : null;
+      const chairSignUrl = chairSignRes?.url ? String(chairSignRes.url) : null;
+      const secSignUrl = secSignRes?.url ? String(secSignRes.url) : null;
 
       const fullMinutes = {
   ...min,
-  items: itemsRes?.data?.listMinuteItemsByMinutes?.items || [],
-  attendance: attendanceRes?.data?.listAttendanceByMinutes?.items || [],
+  items: (itemsRes as any)?.data?.listMinuteItemsByMinutes?.items || [],
+  attendance: (attendanceRes as any)?.data?.listAttendanceByMinutes?.items || [],
   chairSignUrl,
   secSignUrl,
 };
@@ -205,13 +210,16 @@ return fullMinutes;
 
       const urls: { passport?: string; idFront?: string; idBack?: string } = {};
       if (sm.photoPassport && sm.photoPassport !== 'None') {
-        urls.passport = (await getUrl({ key: sm.photoPassport }))?.url;
+        const res: any = await getUrl({ key: sm.photoPassport });
+        urls.passport = res?.url ? String(res.url) : undefined;
       }
       if (sm.idFront && sm.idFront !== 'None') {
-        urls.idFront = (await getUrl({ key: sm.idFront }))?.url;
+        const res: any = await getUrl({ key: sm.idFront });
+        urls.idFront = res?.url ? String(res.url) : undefined;
       }
       if (sm.idBack && sm.idBack !== 'None') {
-        urls.idBack = (await getUrl({ key: sm.idBack }))?.url;
+        const res: any = await getUrl({ key: sm.idBack });
+        urls.idBack = res?.url ? String(res.url) : undefined;
       }
       setPhotoUrls(urls);
     } catch (err) {
@@ -401,8 +409,10 @@ return fullMinutes;
           .decision { font-style: italic; color: #065f46; }
           table { width: 100%; border-collapse: collapse; margin-top: 12px; }
           th, td { border: 1px solid #ddd; padding: 6px; }
-          .signatures { margin-top: 24px; display: flex; justify-content: space-between; }
-          img { max-height: 80px; }
+          .signatures { margin-top: 24px; display: flex; flex-wrap: wrap; justify-content: space-around; align-items: center; gap: 24px; }
+          .signatures div { text-align: center; width:48%; min-width: 160px; }
+          .signature-img { max-height: 120px; max-width: 360px; width: auto; display: block; margin: 8px auto 0; }
+          @media print { .signature-img { max-height: 112px; max-width: 320px; } }
         </style></head>
         <body>
           <h1>${selectedGroup?.grpName} — Official Minutes</h1>
@@ -430,11 +440,11 @@ return fullMinutes;
           <div class="signatures">
             <div>
               <strong>Chairperson</strong><br/>
-              ${min.chairSignUrl ? `<img src="${min.chairSignUrl}" />` : "-"}
+              ${min.chairSignUrl ? `<img class="signature-img" src="${min.chairSignUrl}" />` : "-"}
             </div>
             <div>
               <strong>Secretary</strong><br/>
-              ${min.secSignUrl ? `<img src="${min.secSignUrl}" />` : "-"}
+              ${min.secSignUrl ? `<img class="signature-img" src="${min.secSignUrl}" />` : "-"}
             </div>
           </div>
         </body>
@@ -472,12 +482,26 @@ if (!minutes && selectedLoan?.loanMinutes) {
     h2 { margin-top: 20px; }
     table { width: 100%; border-collapse: collapse; margin-top: 12px; }
     th, td { border: 1px solid #ddd; padding: 6px; }
-    .signatures { margin-top: 24px; display: flex; justify-content: space-between; }
-    img { max-height: 80px; }
-    .id-section { display:flex; gap:40px; margin-top:20px; }
-    .passport { border:3px solid #e29d58; border-radius:90px; overflow:hidden; width:180px; height:180px; }
-    .id { border:2px solid #e29d58; border-radius:10px; width:240px; height:150px; overflow:hidden; }
-    .id img, .passport img { width:100%; height:100%; object-fit:contain; }
+    .signatures { margin-top: 24px; display: flex; justify-content: space-between; align-items: center; gap: 24px; flex-wrap: wrap; }
+    .signatures div { text-align: center; width:48%; min-width: 220px; }
+    .signature-img { max-height: 120px; max-width: 360px; width: auto; display: block; margin: 8px auto 0; }
+    @media print { .signature-img { max-height: 112px; max-width: 320px; } }
+    img { max-width: 100%; height: auto; }
+
+    /* Identification block - vertical, generous spacing, print-friendly */
+    .id-section { display:block; gap:24px; margin-top:20px; }
+    .id-block { margin-bottom: 24px; text-align: center; }
+    .id-label { font-weight: 700; margin-bottom: 8px; }
+    .passport { border:3px solid #e29d58; border-radius:8px; overflow:hidden; width:320px; height:420px; margin: 0 auto; }
+    .id { border:2px solid #e29d58; border-radius:8px; width:360px; height:220px; overflow:hidden; margin: 0 auto; }
+    .id img, .passport img { width:100%; height:100%; object-fit:cover; }
+
+    /* Page-break hints for printing */
+    @media print {
+      .id-block { page-break-inside: avoid; }
+      .signatures { page-break-inside: avoid; }
+    }
+
     .item { margin-bottom: 12px; }
     .decision { font-style: italic; color: #065f46; }
   </style></head>
@@ -485,11 +509,9 @@ if (!minutes && selectedLoan?.loanMinutes) {
 
    <h1>Identification</h1>
     <div class="id-section">
-      ${photoUrls.passport ? `<div class="passport"><img src="${photoUrls.passport}" /></div>` : ""}
-      ${photoUrls.idFront ? `<div class="id"><img src="${photoUrls.idFront}" /></div>` : ""}
-      ${photoUrls.idBack ? `<div class="id"><img src="${photoUrls.idBack}" /></div>` : ""}
-    </div>
-
+      ${photoUrls.passport ? `<div class="id-block"><div class="id-label">Passport / Portrait</div><div class="passport"><img src="${photoUrls.passport}" /></div></div>` : ""}
+      ${photoUrls.idFront ? `<div class="id-block"><div class="id-label">National ID / Passport - Front</div><div class="id"><img src="${photoUrls.idFront}" /></div></div>` : ""}
+      ${photoUrls.idBack ? `<div class="id-block"><div class="id-label">National ID / Passport - Back</div><div class="id"><img src="${photoUrls.idBack}" /></div></div>` : ""}
 
     <h2>${selectedLoan?.loaneeName} — Full Loan Application Report</h2>
 
@@ -572,11 +594,11 @@ ${minutes ? `
   <div class="signatures">
     <div>
       <strong>Chairperson</strong><br/>
-      ${minutes.chairSignUrl ? `<img src="${minutes.chairSignUrl}" />` : "Not signed"}
+      ${minutes.chairSignUrl ? `<img class="signature-img" src="${minutes.chairSignUrl}" />` : "Not signed"}
     </div>
     <div>
       <strong>Secretary</strong><br/>
-      ${minutes.secSignUrl ? `<img src="${minutes.secSignUrl}" />` : "Not signed"}
+      ${minutes.secSignUrl ? `<img class="signature-img" src="${minutes.secSignUrl}" />` : "Not signed"}
     </div>
   </div>
 ` : `
@@ -620,6 +642,30 @@ ${minutes ? `
           </TouchableOpacity>
         </View>
       </View>
+
+      {/* On-screen identification preview (vertical, generous spacing) */}
+      {selectedLoan && (photoUrls.passport || photoUrls.idFront || photoUrls.idBack) ? (
+        <View style={styles.previewContainer}>
+          {photoUrls.passport ? (
+            <View style={styles.previewBlock}>
+              <Text style={styles.previewLabel}>Passport / Portrait</Text>
+              <SafeImage uri={photoUrls.passport} style={styles.previewPassport} />
+            </View>
+          ) : null}
+          {photoUrls.idFront ? (
+            <View style={styles.previewBlock}>
+              <Text style={styles.previewLabel}>National ID / Passport - Front</Text>
+              <SafeImage uri={photoUrls.idFront} style={styles.previewId} />
+            </View>
+          ) : null}
+          {photoUrls.idBack ? (
+            <View style={styles.previewBlock}>
+              <Text style={styles.previewLabel}>National ID / Passport - Back</Text>
+              <SafeImage uri={photoUrls.idBack} style={styles.previewId} />
+            </View>
+          ) : null}
+        </View>
+      ) : null}
 
       {/* Group buttons */}
       {adminGroups.map(group => (
@@ -757,8 +803,9 @@ ${minutes ? `
                 style={styles.secondaryBtn}
                 onPress={async () => {
                   try {
-                    const url = (await getUrl({ key: loan.loanMinutesImage }))?.url;
-                    if (url && typeof url === 'string' && url.trim() !== '') {
+                    const res: any = await getUrl({ key: loan.loanMinutesImage });
+                    const url = res?.url ? String(res.url) : '';
+                    if (url && url.trim() !== '') {
                       setSelectedImage(url);
                     } else {
                       Alert.alert('No image', 'Unable to load uploaded minutes');
@@ -1278,6 +1325,41 @@ const styles = StyleSheet.create({
     borderColor: '#e5e7eb',
     borderRadius: 6,
     backgroundColor: '#ffffff',
+  },
+
+  // On-screen ID preview styles
+  previewContainer: {
+    marginVertical: 16,
+    padding: 12,
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+  },
+  previewBlock: {
+    marginBottom: 16,
+    alignItems: 'center',
+  },
+  previewLabel: {
+    fontWeight: '700',
+    marginBottom: 8,
+    color: '#374151',
+  },
+  previewPassport: {
+    width: 200,
+    height: 260,
+    borderRadius: 8,
+    borderWidth: 2,
+    borderColor: '#e29d58',
+    overflow: 'hidden',
+  },
+  previewId: {
+    width: 260,
+    height: 160,
+    borderRadius: 8,
+    borderWidth: 2,
+    borderColor: '#e29d58',
+    overflow: 'hidden',
   },
 
   // Tabs (credit modal)
